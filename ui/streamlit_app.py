@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Ensure workspace root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import io
 import json
 import base64
@@ -91,12 +97,12 @@ with st.sidebar:
     st.markdown("### 🩺 Medical OCR Settings")
 
     api_base_url = st.text_input("API Base URL (Port 8200)", value="http://localhost:8200")
-    backend = st.selectbox("LLM Backend", options=["llama-cpp", "ollama"], index=0)
+    backend = st.selectbox("LLM Backend", options=["ollama", "llama-cpp"], index=0)
     
     model_name = st.text_input(
         "Model Name",
-        value="qwen2.5-vl:7b",
-        help="Recommended: qwen2.5-vl:7b or qwen2.5-vl:3b for document/report OCR precision."
+        value="gemma4:latest",
+        help="Recommended: gemma4:latest for local vision OCR precision."
     )
 
     st.divider()
@@ -106,6 +112,7 @@ with st.sidebar:
         "Task Mode",
         options=[
             "🩺 Medical Lab Report Extractor",
+            "🔍 Print Verification & Line Check",
             "📋 General Document OCR & Tables",
             "🧾 Invoice / Receipt Parser",
             "🤖 Custom Prompt"
@@ -118,6 +125,12 @@ with st.sidebar:
             "Analyze the medical report image with high precision. Transcribe exact Patient details (Name, Age, Sex, PID, Dates) "
             "and all Investigation parameters (Observed Values, Units, Biological Reference Intervals, and Abnormal High/Low flags 'H'/'L'). "
             "Never guess numbers or decimal points. Be 100% accurate."
+        ),
+        "🔍 Print Verification & Line Check": (
+            "You are a High-Precision Medical Report Verification and OCR Auditor. "
+            "Your task is to transcribe and audit EVERY SINGLE printed value from the lab report scan, organized section-by-section. "
+            "Perform a strict 1-to-1 verification against the printed document. "
+            "Extract exact numbers, units, flags ('H'/'L'), and reference intervals without omitting any detail."
         ),
         "📋 General Document OCR & Tables": (
             "You are an expert Document OCR system. Extract all visible text, headings, tabular data, and key-value pairs accurately into clean Markdown format."
@@ -176,7 +189,7 @@ with col_stat:
 st.divider()
 
 # Document / Report Upload Section
-st.markdown("### 📄 Upload Report Image")
+st.markdown("### 📄 Upload Report Image or PDF Document")
 col_upload, col_preview = st.columns([1, 1])
 
 uploaded_b64 = None
@@ -184,24 +197,67 @@ pil_image = None
 
 with col_upload:
     uploaded_file = st.file_uploader(
-        "Upload Medical Report / Document Scan (PNG, JPG, WEBP)",
-        type=["jpg", "jpeg", "png", "webp"],
+        "Upload Medical Report Document Scan (PDF, PNG, JPG, WEBP)",
+        type=["pdf", "jpg", "jpeg", "png", "webp"],
         key="report_uploader"
     )
     if uploaded_file:
         bytes_data = uploaded_file.read()
-        pil_image = Image.open(io.BytesIO(bytes_data))
-        uploaded_b64 = f"data:image/jpeg;base64,{base64.b64encode(bytes_data).decode('utf-8')}"
+        is_pdf = uploaded_file.name.lower().endswith(".pdf") or bytes_data.startswith(b"%PDF")
+        if is_pdf:
+            try:
+                from app.services.image_processor import ImageProcessor
+                processed_uri = ImageProcessor.process_image_bytes(bytes_data)
+                uploaded_b64 = processed_uri
+                # Decode for preview
+                header, b64_str = processed_uri.split(",", 1)
+                img_bytes = base64.b64decode(b64_str)
+                pil_image = Image.open(io.BytesIO(img_bytes))
+                st.success("📄 PDF Document converted and rendered to document view!")
+            except Exception as pdf_err:
+                st.error(f"Error processing PDF document: {pdf_err}")
+        else:
+            pil_image = Image.open(io.BytesIO(bytes_data))
+            uploaded_b64 = f"data:image/jpeg;base64,{base64.b64encode(bytes_data).decode('utf-8')}"
 
-    url_input = st.text_input("Or enter Report Image URL", placeholder="https://example.com/medical-report.jpg")
+    import os, glob
+    pdf_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "pdf"))
+    if os.path.exists(pdf_dir):
+        sample_pdfs = sorted(glob.glob(os.path.join(pdf_dir, "*.pdf")))
+        if sample_pdfs:
+            options = ["-- Select Sample PDF from pdf/ --"] + [os.path.basename(p) for p in sample_pdfs]
+            selected_sample = st.selectbox("📁 Or pick a Sample PDF report from pdf/ folder", options=options)
+            if selected_sample != "-- Select Sample PDF from pdf/ --":
+                sample_path = os.path.join(pdf_dir, selected_sample)
+                with open(sample_path, "rb") as f_sample:
+                    s_bytes = f_sample.read()
+                    from app.services.image_processor import ImageProcessor
+                    processed_uri = ImageProcessor.process_image_bytes(s_bytes)
+                    uploaded_b64 = processed_uri
+                    header, b64_str = processed_uri.split(",", 1)
+                    img_bytes = base64.b64decode(b64_str)
+                    pil_image = Image.open(io.BytesIO(img_bytes))
+                    st.success(f"📄 Loaded sample report: `{selected_sample}`")
+
+    url_input = st.text_input("Or enter Report Source Link (Image or PDF URL)", placeholder="https://example.com/medical-report.pdf")
     if url_input.strip():
         uploaded_b64 = url_input.strip()
         try:
-            r = requests.get(uploaded_b64, timeout=5)
+            r = requests.get(uploaded_b64, timeout=10)
             if r.status_code == 200:
-                pil_image = Image.open(io.BytesIO(r.content))
-        except Exception:
-            st.error("Could not fetch image from URL.")
+                is_pdf_url = url_input.lower().endswith(".pdf") or r.content.startswith(b"%PDF") or "application/pdf" in r.headers.get("content-type", "")
+                if is_pdf_url:
+                    from app.services.image_processor import ImageProcessor
+                    processed_uri = ImageProcessor.process_image_bytes(r.content)
+                    uploaded_b64 = processed_uri
+                    header, b64_str = processed_uri.split(",", 1)
+                    img_bytes = base64.b64decode(b64_str)
+                    pil_image = Image.open(io.BytesIO(img_bytes))
+                    st.success("📄 PDF Link loaded & converted successfully!")
+                else:
+                    pil_image = Image.open(io.BytesIO(r.content))
+        except Exception as err:
+            st.error(f"Could not fetch document from URL: {err}")
 
 if uploaded_b64:
     st.session_state.current_image_b64 = uploaded_b64
@@ -209,18 +265,63 @@ if uploaded_b64:
 
 with col_preview:
     if st.session_state.current_image_display:
-        st.image(st.session_state.current_image_display, caption="Loaded Document Scan", use_column_width=True)
+        st.image(st.session_state.current_image_display, caption="Loaded Document View (PDF / Image)", use_column_width=True)
     else:
-        st.info("👆 Upload a medical report image above to start extracting data.")
+        st.info("👆 Upload a medical report PDF or image scan above to start extracting data.")
+
+# Async Job & Webhook Event Studio Expander
+with st.expander("📢 Async Job Processing & PubSub Webhook Event Studio", expanded=False):
+    st.markdown("""
+    Submit PDF or Image reports to be processed **asynchronously as a Job**. 
+    Once completed, an event (`report.processed`) is emitted via **Webhook / PubSub** hook with the download URL.
+    """)
+    col_job1, col_job2 = st.columns([2, 1])
+    with col_job1:
+        job_webhook_url = st.text_input(
+            "Webhook / PubSub Callback URL (Optional)",
+            placeholder="https://webhook.site/your-unique-id or http://localhost:8000/webhook",
+            help="System will POST an HTTP event with download URL once job completes"
+        )
+    with col_job2:
+        st.write("") # vertical spacing
+        st.write("")
+        submit_job_btn = st.button("🚀 Submit Async Report Job")
+
+    if submit_job_btn:
+        if not st.session_state.current_image_b64:
+            st.warning("Please upload a PDF or image report first.")
+        else:
+            job_payload = {
+                "document": st.session_state.current_image_b64,
+                "prompt": active_prompt if active_prompt else "Perform an exact line-by-line verification check of all values in this report against the printed document.",
+                "system_prompt": system_prompt,
+                "backend": backend,
+                "model": model_name,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "webhook_url": job_webhook_url.strip() if job_webhook_url.strip() else None,
+                "meta": {"source": "streamlit_studio"}
+            }
+            try:
+                res = requests.post(f"{api_base_url}/api/v1/jobs", json=job_payload, timeout=10)
+                if res.status_code == 202:
+                    job_data = res.json()
+                    st.success(f"✅ Job Created! **Job ID:** `{job_data['job_id']}`")
+                    st.json(job_data)
+                    st.markdown(f"📥 **Result Download URL:** [{job_data['download_url']}]({job_data['download_url']})")
+                else:
+                    st.error(f"Failed to submit job ({res.status_code}): {res.text}")
+            except Exception as j_err:
+                st.error(f"Job submission error: {j_err}")
 
 # Presets for Medical Extraction
 preset_prompt = None
 if st.session_state.current_image_display:
     st.markdown("#### ⚡ Quick Medical Extraction Actions")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5 = st.columns(5)
 
     with c1:
-        if st.button("📊 Full JSON Extraction"):
+        if st.button("📊 Full JSON"):
             preset_prompt = (
                 "Extract all data from this lab report into a structured JSON object containing:\n"
                 "1. patient_info (name, age, sex, pid_no, reference_dr, registered_on, reported_on)\n"
@@ -235,13 +336,30 @@ if st.session_state.current_image_display:
                 "with columns: | Investigation | Observed Value | Flag (H/L) | Unit | Biological Reference Interval |."
             )
     with c3:
+        if st.button("🔍 Check Against Print"):
+            preset_prompt = (
+                "Perform an exact line-by-line verification check of all values in this lab report against the printed document.\n\n"
+                "Structure your response into clear sections so every single printed value can be checked 1-to-1 against the physical printout:\n\n"
+                "1. 👤 PATIENT & REPORT HEADER DETAILS:\n"
+                "- Patient Name\n- PID No. & Tel No.\n- Age & Sex\n- Reference Dr & Sample Collected At / Collecting Center\n- Registered On, Collected On, Reported On\n\n"
+                "2. 🧪 REPORT TITLE: (e.g., Full Blood Count)\n\n"
+                "3. 📊 PARAMETER VERIFICATION TABLE (Exact match to print layout):\n"
+                "Extract every test parameter under its exact section heading (e.g., Leucocytes, Erythrocytes, Platelets):\n"
+                "| Section / Investigation | Printed Observed Value | Flag (H/L) | Printed Unit | Biological Reference Interval | Verification Status |\n\n"
+                "4. ⚠️ ABNORMAL / FLAGGED VALUES SUMMARY:\n"
+                "List each flagged parameter with its exact printed value and reference range.\n\n"
+                "5. 🖋️ FOOTER & SIGNATURES:\n"
+                "Extract all doctor names, designations, and MLT signatures printed at the bottom.\n\n"
+                "Ensure 100% precision with exact numbers, units, and flags ('H' or 'L')."
+            )
+    with c4:
         if st.button("⚠️ Out-of-Range Flags"):
             preset_prompt = (
                 "Identify and list all test parameters that are Abnormal or Out-of-Range "
                 "(e.g. flagged with 'H', 'L', or falling outside the Biological Reference Interval). Explain their clinical context briefly."
             )
-    with c4:
-        if st.button("📝 Full OCR Text"):
+    with c5:
+        if st.button("📝 Full Text"):
             preset_prompt = "Transcribe all visible text from top to bottom of this medical report document accurately."
 
 st.divider()

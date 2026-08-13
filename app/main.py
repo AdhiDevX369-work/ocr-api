@@ -10,7 +10,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routers import health_router, chat_router
+from app.routers import health_router, chat_router, job_router
 from app.services.llm_client import llm_client
 
 # Configure Logging
@@ -31,11 +31,10 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Production Image-Based Vision Chat API",
     description=(
-        "High-performance vision chat API interface supporting base64 images, direct file uploads, "
-        "and image URLs with real-time SSE streaming. Interfaced to LLM Gateway Server running at port 8100 "
-        "with llama.cpp backend and Qwen 3.5 4B model."
+        "High-performance vision chat API interface supporting base64 images, PDF documents, direct file uploads, "
+        "and document URLs with real-time SSE streaming, background jobs, and webhook event emission."
     ),
-    version="1.0.0",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -51,6 +50,7 @@ app.add_middleware(
 # Include Routers
 app.include_router(health_router.router)
 app.include_router(chat_router.router)
+app.include_router(job_router.router)
 
 @app.get("/", summary="Root Endpoint")
 async def root():

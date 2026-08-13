@@ -19,12 +19,13 @@ async def test_api_image_chat():
     payload = {
         "image": b64_img,
         "prompt": "What color is this image?",
-        "backend": "llama-cpp",
+        "backend": "ollama",
+        "model": "gemma4:latest",
         "temperature": 0.0,
         "stream": False
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             r = await client.post("http://localhost:8200/api/v1/image-chat", json=payload)
             print(f"Status Code: {r.status_code}")
@@ -47,7 +48,7 @@ async def test_api_image_chat():
         "stream": False
     }
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             r = await client.post("http://localhost:8200/v1/chat/completions", json=payload_openai)
             print(f"Status Code: {r.status_code}")

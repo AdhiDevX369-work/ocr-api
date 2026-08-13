@@ -114,7 +114,19 @@ class LLMClient:
         try:
             resp = await client.get("/health", headers=headers, timeout=5.0)
             if resp.status_code == 200:
-                return resp.json()
+                res = resp.json()
+                if "status" not in res:
+                    res["status"] = "healthy"
+                return res
+            
+            # Fallback for native Ollama server (returns 200 on / or /api/version)
+            resp_root = await client.get("/", headers=headers, timeout=5.0)
+            if resp_root.status_code == 200:
+                return {
+                    "status": "healthy",
+                    "server": "ollama",
+                    "detail": resp_root.text.strip()
+                }
             return {"status": "unhealthy", "http_status": resp.status_code, "detail": resp.text}
         except Exception as e:
             return {"status": "unreachable", "error": str(e)}
