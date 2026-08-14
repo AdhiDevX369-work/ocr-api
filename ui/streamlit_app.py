@@ -97,12 +97,19 @@ with st.sidebar:
     st.markdown("### 🩺 Medical OCR Settings")
 
     api_base_url = st.text_input("API Base URL (Port 8200)", value="http://localhost:8200")
-    backend = st.selectbox("LLM Backend", options=["ollama", "llama-cpp"], index=0)
+    backend = st.selectbox("LLM Backend", options=["llm-server", "ollama", "llama-cpp"], index=0)
     
     model_name = st.text_input(
         "Model Name",
-        value="gemma4:latest",
-        help="Recommended: gemma4:latest for local vision OCR precision."
+        value="qwen2.5vl:latest",
+        help="Default vision model: qwen2.5vl:latest on Gateway/Ollama."
+    )
+
+    api_key = st.text_input(
+        "Gateway API Key",
+        value="sk_oWt_VA4WcX84xa18rjt-RovbNH7dwhmZjlrLeDVMIZo",
+        type="password",
+        help="API key for llm-server gateway on port 8100"
     )
 
     st.divider()
@@ -178,7 +185,7 @@ health_status = check_health(api_base_url)
 col_head, col_stat = st.columns([3, 1])
 with col_head:
     st.markdown("<div class='main-title'>🩺 Medical Report OCR & Vision AI Studio</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sub-title'>High-Precision Laboratory & Document Data Extraction (Port 8200 & 8100)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='sub-title'>High-Precision Laboratory & Document Data Extraction (llm-server :8100, Ollama :11434, llama-server :8080)</div>", unsafe_allow_html=True)
 
 with col_stat:
     if health_status and health_status.get("status") == "healthy":

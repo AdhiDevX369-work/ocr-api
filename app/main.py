@@ -23,7 +23,7 @@ logger = logging.getLogger("image-chat-api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info(f"🚀 Starting Image-Based Chat API on port {settings.port}")
-    logger.info(f"🔗 Target LLM Gateway: {settings.llm_server_url} (Default Backend: {settings.default_backend}, Model: {settings.default_model})")
+    logger.info(f"🔗 Direct Backends: llama-cpp ({settings.llama_cpp_url}), Ollama ({settings.ollama_url}) | Default Backend: {settings.default_backend}")
     yield
     logger.info("🛑 Shutting down API service & closing HTTP connections...")
     await llm_client.close()

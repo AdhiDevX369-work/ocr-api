@@ -15,6 +15,8 @@ class JobService:
     def __init__(self):
         self._jobs: Dict[str, Dict[str, Any]] = {}
         self._lock = asyncio.Lock()
+        # Single worker semaphore so batch jobs execute sequentially without overloading local GPU LLM server
+        self._gpu_semaphore = asyncio.Semaphore(1)
 
     async def create_job(self, request: JobCreateRequest, document_uri: Optional[str] = None) -> JobResponse:
         job_id = f"job_{uuid.uuid4().hex[:12]}"
@@ -65,13 +67,14 @@ class JobService:
             return self._jobs.get(job_id)
 
     async def _process_job_background(self, job_id: str):
-        logger.info(f"🔄 [Job {job_id}] Started processing background job...")
-        
-        async with self._lock:
-            job = self._jobs.get(job_id)
-            if not job:
-                return
-            job["status"] = JobStatus.PROCESSING
+        async with self._gpu_semaphore:
+            logger.info(f"🔄 [Job {job_id}] Started processing background job...")
+            
+            async with self._lock:
+                job = self._jobs.get(job_id)
+                if not job:
+                    return
+                job["status"] = JobStatus.PROCESSING
 
         try:
             # 1. Normalize PDF or Image document into vision base64 URI
@@ -89,20 +92,18 @@ class JobService:
                 }
             ]
 
-            # 3. Call LLM Vision Backend
-            raw_res = await llm_client.chat_completion(
+            # 3. Call LLM Vision Backend via streaming to maintain active connection and prevent timeouts
+            content_parts = []
+            async for chunk in llm_client.chat_completion_stream(
                 messages=messages,
                 model=job["model"],
                 backend=job["backend"],
                 temperature=job["temperature"],
-                max_tokens=job["max_tokens"],
-                stream=False
-            )
+                max_tokens=job["max_tokens"]
+            ):
+                content_parts.append(chunk)
 
-            choices = raw_res.get("choices", [])
-            assistant_content = ""
-            if choices:
-                assistant_content = choices[0].get("message", {}).get("content", "")
+            assistant_content = "".join(content_parts)
 
             finish_iso = datetime.now(timezone.utc).isoformat()
 
