@@ -11,7 +11,8 @@ class Settings(BaseSettings):
     default_model: str = "qwen2.5vl:latest"
     llm_api_key: str = "sk_oWt_VA4WcX84xa18rjt-RovbNH7dwhmZjlrLeDVMIZo"
     streamlit_port: int = 8600
-    max_image_size_px: int = 1280
+    max_image_size_px: int = 1024
+    max_stitched_height_px: int = 1536
     image_jpeg_quality: int = 85
     llm_timeout: float = 300.0
 
@@ -22,3 +23,4 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+

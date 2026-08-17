@@ -129,20 +129,22 @@ class ImageProcessor:
         elif image.mode != "RGB":
             image = image.convert("RGB")
 
-        # Downscale if exceeding max dimension
+        # Downscale if exceeding max dimension or max stitched height
         w, h = image.size
-        if max(w, h) > max_dim:
-            if w > h:
-                new_w = max_dim
-                new_h = int(h * (max_dim / w))
-            else:
-                new_h = max_dim
-                new_w = int(w * (max_dim / h))
+        scale = 1.0
+        if w > max_dim:
+            scale = min(scale, max_dim / w)
+        if h > getattr(settings, "max_stitched_height_px", 1536):
+            scale = min(scale, getattr(settings, "max_stitched_height_px", 1536) / h)
+
+        if scale < 1.0:
+            new_w = max(1, int(w * scale))
+            new_h = max(1, int(h * scale))
             image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            logger.info(f"Resized document image from {w}x{h} to {new_w}x{new_h}")
+            logger.info(f"Resized document image from {w}x{h} to {new_w}x{new_h} (scale={scale:.2f})")
 
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=quality, optimize=True)
+        image.save(buffer, format="JPEG", quality=quality, optimize=True, subsampling=0)
         b64_encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
         return f"data:image/jpeg;base64,{b64_encoded}"
 

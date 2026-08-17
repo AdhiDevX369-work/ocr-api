@@ -44,7 +44,7 @@ class LLMClient:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 timeout=self._get_timeout(),
-                limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
+                limits=httpx.Limits(max_keepalive_connections=50, max_connections=200, keepalive_expiry=300.0)
             )
         return self._client
 
@@ -148,9 +148,33 @@ class LLMClient:
             logger.info(f"🤖 No models returned by [{target_backend}], using fallback model: '{fallback}'")
             return fallback
 
-        model_ids = [m["id"] for m in available_models if m.get("id")]
+        vision_keywords = ["qwen2.5vl", "qwen2.5-vl", "vl", "vision", "llava", "moondream", "gemma4", "minicpm-v", "llama3.2-vision", "bakllava"]
 
-        # 1. If requested model is specified and available in server tags, use it directly!
+        # 1. If has_images=True, verify requested model supports vision or select a vision-capable model
+        if has_images:
+            # Check if requested model itself is a vision model
+            if requested_model:
+                req_lower = requested_model.lower()
+                is_req_vision = any(vk in req_lower for vk in vision_keywords)
+                if is_req_vision:
+                    for m in available_models:
+                        m_id = m.get("id", "")
+                        m_aliases = [a.lower() for a in m.get("aliases", [])]
+                        if m_id.lower() == req_lower or req_lower in m_aliases or req_lower in m_id.lower():
+                            logger.info(f"🎯 Using requested vision model '{m_id}' on [{target_backend}]")
+                            return m_id
+
+            # Select first available vision-capable model
+            for m in available_models:
+                m_id = m.get("id", "").lower()
+                modalities = m.get("input_modalities", [])
+                if "image" in modalities or any(vk in m_id for vk in vision_keywords):
+                    logger.info(f"👁️ Auto-selected vision-capable model '{m['id']}' on [{target_backend}] (requested model '{requested_model}' is text-only)")
+                    return m["id"]
+
+            logger.warning(f"⚠️ An image was provided but no known vision models found on [{target_backend}].")
+
+        # 2. If requested model is specified and available in server tags, use it directly
         if requested_model:
             req_lower = requested_model.lower()
             for m in available_models:
@@ -159,16 +183,6 @@ class LLMClient:
                 if m_id.lower() == req_lower or req_lower in m_aliases or req_lower in m_id.lower():
                     logger.info(f"🎯 Using requested model '{m_id}' on [{target_backend}]")
                     return m_id
-
-        # 2. If has_images=True, prioritize known vision models (qwen2.5vl, vl, vision, llava)
-        if has_images:
-            vision_keywords = ["qwen2.5vl", "vl", "vision", "llava", "moondream"]
-            for m in available_models:
-                m_id = m.get("id", "").lower()
-                modalities = m.get("input_modalities", [])
-                if "image" in modalities or any(vk in m_id for vk in vision_keywords):
-                    logger.info(f"👁️ Selected vision-capable model '{m['id']}' on [{target_backend}]")
-                    return m["id"]
 
         # 3. Prioritize 'loaded' model
         for m in available_models:
@@ -223,46 +237,50 @@ class LLMClient:
             "options": {
                 "temperature": temperature,
                 "num_gpu": 99,
-                "num_thread": 8
+                "num_thread": 8,
+                "num_ctx": 32768,
+                "num_predict": max_tokens if max_tokens else 8192
             }
         }
-        if max_tokens:
-            payload["options"]["num_predict"] = max_tokens
         return payload
 
     async def check_health(self) -> Dict[str, Any]:
-        """Performs connection & model discovery checks directly against llama.cpp & Ollama backends."""
+        """Performs connection & model discovery checks concurrently against llama.cpp & Ollama backends."""
         client = await self.get_client()
 
         llama_status = {"status": "unreachable", "url": self.llama_cpp_url, "models": []}
         ollama_status = {"status": "unreachable", "url": self.ollama_url, "models": []}
 
-        # Check direct llama-cpp server (port 8080)
-        try:
-            resp = await client.get(f"{self.llama_cpp_url}/v1/models", timeout=3.0)
-            if resp.status_code == 200:
-                data = resp.json().get("data", [])
-                models = [m.get("id") for m in data if m.get("id")]
-                llama_status = {
-                    "status": "healthy",
-                    "url": self.llama_cpp_url,
-                    "models": models
-                }
-        except Exception as e:
-            llama_status["error"] = str(e)
+        async def _check_llama():
+            nonlocal llama_status
+            try:
+                resp = await client.get(f"{self.llama_cpp_url}/v1/models", timeout=1.5)
+                if resp.status_code == 200:
+                    data = resp.json().get("data", [])
+                    models = [m.get("id") for m in data if m.get("id")]
+                    llama_status = {
+                        "status": "healthy",
+                        "url": self.llama_cpp_url,
+                        "models": models
+                    }
+            except Exception as e:
+                llama_status["error"] = str(e)
 
-        # Check direct Ollama server (port 11434)
-        try:
-            resp = await client.get(f"{self.ollama_url}/api/tags", timeout=3.0)
-            if resp.status_code == 200:
-                models = [m.get("name") for m in resp.json().get("models", []) if m.get("name")]
-                ollama_status = {
-                    "status": "healthy",
-                    "url": self.ollama_url,
-                    "models": models
-                }
-        except Exception as e:
-            ollama_status["error"] = str(e)
+        async def _check_ollama():
+            nonlocal ollama_status
+            try:
+                resp = await client.get(f"{self.ollama_url}/api/tags", timeout=1.5)
+                if resp.status_code == 200:
+                    models = [m.get("name") for m in resp.json().get("models", []) if m.get("name")]
+                    ollama_status = {
+                        "status": "healthy",
+                        "url": self.ollama_url,
+                        "models": models
+                    }
+            except Exception as e:
+                ollama_status["error"] = str(e)
+
+        await asyncio.gather(_check_llama(), _check_ollama(), return_exceptions=True)
 
         overall_healthy = (llama_status["status"] == "healthy" or ollama_status["status"] == "healthy")
         return {
@@ -317,7 +335,11 @@ class LLMClient:
                     resp = await client.post(f"{backend_url}/api/chat", json=ollama_payload, headers=headers, timeout=self._get_timeout())
                     if resp.status_code == 200:
                         res_data = resp.json()
-                        assistant_content = res_data.get("message", {}).get("content", "")
+                        msg_obj = res_data.get("message", {})
+                        assistant_content = msg_obj.get("content", "")
+                        thinking = msg_obj.get("thinking", "")
+                        if not assistant_content and thinking:
+                            assistant_content = f"> *Thinking:*\n> {thinking}\n"
                         return {
                             "model": res_data.get("model", selected_model),
                             "choices": [
@@ -425,6 +447,7 @@ class LLMClient:
                                 continue
                             raise LLMClientError(f"Ollama Stream error ({resp.status_code}): {error_text}", status_code=resp.status_code)
 
+                        in_thinking = False
                         async for line in resp.aiter_lines():
                             if not line:
                                 continue
@@ -432,7 +455,16 @@ class LLMClient:
                                 chunk = json.loads(line)
                                 msg = chunk.get("message", {})
                                 content = msg.get("content", "")
+                                thinking = msg.get("thinking", "")
+                                if thinking:
+                                    if not in_thinking:
+                                        in_thinking = True
+                                        yield "> 🧠 *Thinking...*\n> "
+                                    yield thinking.replace("\n", "\n> ")
                                 if content:
+                                    if in_thinking:
+                                        in_thinking = False
+                                        yield "\n\n---\n\n"
                                     yield content
                                 if chunk.get("done"):
                                     break

@@ -5,6 +5,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import io
+import time
 import json
 import base64
 import httpx
@@ -91,19 +92,32 @@ if "current_image_b64" not in st.session_state:
 if "current_image_display" not in st.session_state:
     st.session_state.current_image_display = None
 
+from app.config import settings
+
 # Sidebar Controls
 with st.sidebar:
     st.image("https://img.icons8.com/color/96/medical-history.png", width=56)
     st.markdown("### 🩺 Medical OCR Settings")
 
-    api_base_url = st.text_input("API Base URL (Port 8200)", value="http://localhost:8200")
-    backend = st.selectbox("LLM Backend", options=["llm-server", "ollama", "llama-cpp"], index=0)
+    api_base_url = st.text_input("API Base URL (Port 8200)", value=f"http://localhost:{settings.port}")
+    backend_options = ["ollama", "llm-server", "llama-cpp"]
+    default_backend_idx = backend_options.index(settings.default_backend) if settings.default_backend in backend_options else 0
+    backend = st.selectbox("LLM Backend", options=backend_options, index=default_backend_idx)
     
-    model_name = st.text_input(
-        "Model Name",
-        value="qwen2.5vl:latest",
-        help="Default vision model: qwen2.5vl:latest on Gateway/Ollama."
+    known_models = ["qwen2.5vl:latest", "qwen3-vl:4b", "qwen2.5:7b", "llama3.1:latest", "mistral:latest"]
+    default_model_val = settings.default_model if settings.default_model in known_models else "qwen2.5vl:latest"
+    default_model_idx = known_models.index(default_model_val) if default_model_val in known_models else 0
+
+    selected_model_option = st.selectbox(
+        "Vision Model",
+        options=known_models + ["Custom..."],
+        index=default_model_idx,
+        help="qwen2.5vl:latest is ultra-fast with no thinking delay. qwen3-vl:4b is a reasoning model with thinking tokens."
     )
+    if selected_model_option == "Custom...":
+        model_name = st.text_input("Custom Model Name", value=settings.default_model)
+    else:
+        model_name = selected_model_option
 
     api_key = st.text_input(
         "Gateway API Key",
@@ -158,7 +172,7 @@ with st.sidebar:
 
     st.markdown("### 🎛️ Parameters")
     temperature = st.slider("Temperature", min_value=0.0, max_value=1.0, value=0.0, step=0.05, help="0.0 for exact deterministic extraction & caching")
-    max_tokens = st.slider("Max Output Tokens", min_value=512, max_value=4096, value=2048, step=128)
+    max_tokens = st.slider("Max Output Tokens", min_value=1024, max_value=16384, value=8192, step=512, help="16k limit ensures even the longest documents & tables are never cut off")
     stream_response = st.checkbox("Enable SSE Streaming", value=True)
 
     st.divider()
@@ -272,7 +286,7 @@ if uploaded_b64:
 
 with col_preview:
     if st.session_state.current_image_display:
-        st.image(st.session_state.current_image_display, caption="Loaded Document View (PDF / Image)", use_column_width=True)
+        st.image(st.session_state.current_image_display, caption="Loaded Document View (PDF / Image)", use_container_width=True)
     else:
         st.info("👆 Upload a medical report PDF or image scan above to start extracting data.")
 
@@ -407,6 +421,11 @@ if active_prompt:
         message_placeholder = st.empty()
         full_response = ""
 
+        # Prune redundant large image data from older history turns to prevent token explosion
+        clean_history = []
+        for m in st.session_state.messages[:-1]:
+            clean_history.append({"role": m["role"], "content": m["content"]})
+
         payload = {
             "image": st.session_state.current_image_b64,
             "prompt": active_prompt,
@@ -416,19 +435,23 @@ if active_prompt:
             "temperature": temperature,
             "max_tokens": max_tokens,
             "stream": stream_response,
-            "history": [
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages[:-1]
-            ]
+            "history": clean_history
         }
 
+        stream_metrics = {"ttft": None, "tps": 0.0, "total_time": 0.0, "tokens": 0}
+
         try:
+            start_t = time.monotonic()
+            first_token_t = None
+            token_count = 0
+            last_render_t = 0.0
+
             if stream_response:
                 with httpx.stream(
                     "POST",
                     f"{api_base_url}/api/v1/image-chat",
                     json=payload,
-                    timeout=120.0
+                    timeout=httpx.Timeout(300.0, connect=30.0, read=180.0)
                 ) as resp:
                     if resp.status_code != 200:
                         st.error(f"API Error ({resp.status_code}): {resp.text}")
@@ -440,22 +463,54 @@ if active_prompt:
                                 data_str = line[6:].strip()
                                 try:
                                     chunk = json.loads(data_str)
-                                    if "content" in chunk and chunk["content"]:
-                                        full_response += chunk["content"]
-                                        message_placeholder.markdown(full_response + "▌")
+                                    if "error" in chunk:
+                                        st.error(f"⚠️ Model Error: {chunk['error']}")
+                                        break
+                                    content_chunk = chunk.get("content", "")
+                                    if content_chunk:
+                                        if first_token_t is None:
+                                            first_token_t = time.monotonic()
+                                            stream_metrics["ttft"] = first_token_t - start_t
+                                        token_count += 1
+                                        full_response += content_chunk
+
+                                        # Micro-batch Markdown rendering every 35ms or newline to prevent UI thread lock
+                                        now = time.monotonic()
+                                        if (now - last_render_t > 0.035) or ("\n" in content_chunk):
+                                            message_placeholder.markdown(full_response + "▌")
+                                            last_render_t = now
+
                                     if chunk.get("done"):
                                         break
                                 except json.JSONDecodeError:
                                     continue
+
+                        # Final render flush
                         message_placeholder.markdown(full_response)
+                        end_t = time.monotonic()
+                        stream_metrics["total_time"] = end_t - start_t
+                        stream_metrics["tokens"] = token_count
+                        if first_token_t and (end_t > first_token_t):
+                            gen_duration = end_t - first_token_t
+                            stream_metrics["tps"] = token_count / gen_duration if gen_duration > 0 else 0.0
             else:
                 resp = requests.post(f"{api_base_url}/api/v1/image-chat", json=payload, timeout=120)
+                end_t = time.monotonic()
                 if resp.status_code == 200:
                     res_data = resp.json()
                     full_response = res_data.get("message", {}).get("content", "")
                     message_placeholder.markdown(full_response)
+                    stream_metrics["total_time"] = end_t - start_t
                 else:
                     st.error(f"API Error ({resp.status_code}): {resp.text}")
+
+            # Display live streaming telemetry if available
+            if stream_metrics["ttft"] is not None:
+                st.caption(
+                    f"⚡ **TTFT:** `{stream_metrics['ttft']:.2f}s` | "
+                    f"🚀 **Speed:** `{stream_metrics['tps']:.1f} tokens/s` | "
+                    f"⏱️ **Total:** `{stream_metrics['total_time']:.2f}s` (`{stream_metrics['tokens']}` tokens)"
+                )
 
         except Exception as e:
             st.error(f"Request failed: {str(e)}")

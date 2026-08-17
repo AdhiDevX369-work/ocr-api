@@ -44,7 +44,7 @@ class ImageChatRequest(BaseModel):
         0.0, ge=0.0, le=2.0, description="Sampling temperature (0.0 for deterministic & LRU cache)."
     )
     max_tokens: Optional[int] = Field(
-        2048, description="Maximum tokens to generate."
+        8192, description="Maximum tokens to generate (higher limits prevent cutoff on long documents & reasoning models)."
     )
 
 class OpenAIChatCompletionRequest(BaseModel):
@@ -52,7 +52,7 @@ class OpenAIChatCompletionRequest(BaseModel):
     messages: List[ChatMessage]
     temperature: Optional[float] = 0.0
     top_p: Optional[float] = 1.0
-    max_tokens: Optional[int] = 2048
+    max_tokens: Optional[int] = 8192
     stream: Optional[bool] = False
     backend: Optional[str] = None
 

@@ -15,7 +15,15 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+    "Content-Type": "text/event-stream",
+}
+
 router = APIRouter(tags=["Vision Chat"])
+
 
 def format_openai_multimodal_message(prompt: str, image_uri: Optional[str] = None) -> Dict[str, Any]:
     """Helper to format text + optional image into standard OpenAI multimodal content structure."""
@@ -113,7 +121,7 @@ async def image_chat(request: ImageChatRequest):
                 err_data = json.dumps({"error": err.message, "done": True})
                 yield f"data: {err_data}\n\n"
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     # Non-streaming mode
     try:
@@ -186,7 +194,7 @@ async def image_chat_upload(
             except LLMClientError as err:
                 yield f"data: {json.dumps({'error': err.message, 'done': True})}\n\n"
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     try:
         raw_res = await llm_client.chat_completion(
@@ -252,7 +260,7 @@ async def openai_chat_completions(request: OpenAIChatCompletionRequest):
                 yield f"data: {json.dumps({'error': err.message})}\n\n"
                 yield "data: [DONE]\n\n"
 
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
     try:
         return await llm_client.chat_completion(
