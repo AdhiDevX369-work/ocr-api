@@ -112,6 +112,11 @@ async def download_job_result(job_id: str, format: Optional[str] = "json"):
     result_content = raw_job.get("result", "")
 
     if format.lower() == "json":
+        if isinstance(result_content, dict) or isinstance(result_content, list):
+            return JSONResponse(
+                content=result_content,
+                headers={"Content-Disposition": f"attachment; filename=report_result_{job_id}.json"}
+            )
         try:
             parsed_json = json.loads(result_content)
             return JSONResponse(
@@ -119,20 +124,21 @@ async def download_job_result(job_id: str, format: Optional[str] = "json"):
                 headers={"Content-Disposition": f"attachment; filename=report_result_{job_id}.json"}
             )
         except Exception:
-            # Fallback if result is Markdown/Text
             data_payload = {
                 "job_id": job_id,
                 "completed_at": raw_job.get("completed_at"),
                 "meta": raw_job.get("meta"),
-                "extracted_text": result_content
+                "extracted_text": str(result_content)
             }
             return JSONResponse(
                 content=data_payload,
                 headers={"Content-Disposition": f"attachment; filename=report_result_{job_id}.json"}
             )
     else:
+        text_str = json.dumps(result_content, indent=2) if isinstance(result_content, (dict, list)) else str(result_content)
         return PlainTextResponse(
-            content=result_content,
+            content=text_str,
             media_type="text/plain",
             headers={"Content-Disposition": f"attachment; filename=report_result_{job_id}.txt"}
         )
+

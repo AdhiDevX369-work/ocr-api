@@ -15,6 +15,20 @@ class Settings(BaseSettings):
     max_stitched_height_px: int = 1536
     image_jpeg_quality: int = 85
     llm_timeout: float = 300.0
+    # Database & Storage
+    database_url: str = "sqlite+aiosqlite:///./ocr.db"  # Defaults to async SQLite, override with postgresql+asyncpg://user:pass@host:5432/db in .env
+    db_echo: bool = False
+    db_pool_size: int = 20
+    db_max_overflow: int = 10
+    storage_dir: str = "./storage"
+
+    # Batch & Job Execution Settings
+    max_batch_size: int = 100
+    max_concurrent_workers: int = 4
+    webhook_timeout: float = 15.0
+    webhook_max_retries: int = 5
+    webhook_secret: str = "ocr-webhook-secret-key-369"
+    api_key: str = "sk-vocr-prod-api-key-default"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -23,4 +37,5 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
+
 

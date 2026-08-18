@@ -1,25 +1,34 @@
-# 🩺 Medical OCR & Report Intelligence API
+# 🩺 Enterprise Medical Vision OCR (vOCR) & Batch Processing Platform
 
-A high-performance, asynchronous FastAPI backend and interactive Streamlit web dashboard for medical report OCR, document extraction, and multimodal document chat powered directly by local LLM engines (**Ollama** and **llama-server**).
+A high-performance, asynchronous FastAPI backend, PostgreSQL/SQLite persistence engine, and interactive Streamlit web dashboard for medical report OCR, structured clinical JSON extraction, and high-throughput multi-document batch pipelines powered directly by local LLM engines (**Ollama** and **llama-server**).
 
 ---
 
 ## 🌟 Key Features
 
-- **Direct Engine Connectivity**: Bypasses gateway proxies to connect directly to local LLM backends:
-  - **Ollama** (`http://localhost:11434`) – Default model: `gemma4:latest`
-  - **llama.cpp** (`http://localhost:8080`)
-- **Multimodal Document Chat (`/api/v1/image-chat`)**: Upload PDF lab reports or image scans and query them with real-time text streaming.
-- **Asynchronous Batch Processing (`/api/v1/jobs`)**:
-  - Submit multiple PDF/Image reports for background processing.
-  - Poll real-time progress (`pending` -> `processing` -> `completed`).
-  - Webhook callback support upon completion.
-  - Download structured JSON / plain-text report extractions.
-- **High-Quality PDF & Image Pipeline**:
-  - High-clarity rendering of multipage PDFs (150 DPI via `pypdfium2` / `PyMuPDF`).
-  - Vertical document page stitching for complete report analysis.
-  - Dynamic aspect-ratio image optimization (max 1280px constraint).
-- **Streamlit Web Dashboard**: Modern UI for image chat, PDF upload, batch job monitoring, and JSON data download.
+- **🚀 Direct Engine Connectivity**: Connects directly to high-throughput local LLM backends:
+  - **Ollama** (`http://localhost:11434`) – Recommended: `qwen2.5vl:latest` / `gemma4:latest`
+  - **llama.cpp / llama-server** (`http://localhost:8080`)
+  - **Gateway llm-server** (`http://localhost:8100`)
+- **⚡ Synchronous & Streaming Single OCR (`/api/v1/ocr/sync`, `/api/v1/ocr/stream`)**: Direct single-document extraction with real-time Server-Sent Events (SSE) streaming and Pydantic schema validation.
+- **📦 Enterprise Multi-Document Batch Processing (`/api/v1/batches`)**:
+  - Submit up to 100 PDF reports or image scans in a single batch API call.
+  - Track parent batch progress in real-time (`total_files`, `processed_files`, `failed_files`, `progress_percentage`).
+  - Download all results as a consolidated JSON or a ZIP archive containing individual JSON reports.
+- **🗄️ Resilient Database Persistence**:
+  - Backed by **SQLAlchemy 2.0 (Async)** with native **PostgreSQL** (`asyncpg`) and SQLite (`aiosqlite`) support.
+  - All batches, individual document jobs, and webhook delivery audit logs are permanently stored and queryable.
+- **📢 Resilient Webhook & Event Dispatcher**:
+  - Automatically emits `report.processed` and `batch.completed` events upon completion.
+  - Signed with **HMAC-SHA256** (`X-Signature-SHA256`) for security and authenticity.
+  - Automatic exponential backoff retries (up to 5 attempts).
+- **🧪 Structured JSON Auto-Repair & Schema Validator**:
+  - Validates and auto-repairs clinical report JSON structures against strict Pydantic schemas (`MedicalReportExtraction`).
+- **📄 High-DPI Hybrid Document Pipeline**:
+  - Direct digital text layer extraction via PyMuPDF.
+  - High-clarity multi-page rendering (150-200 DPI via `pypdfium2` / `PyMuPDF`).
+- **🖥️ Modern Streamlit Web Studio**:
+  - Dedicated tabs for Interactive Single Document OCR, Multi-Document Batch Studio with live progress bars, and Historical Batch Explorer.
 
 ---
 
@@ -29,19 +38,29 @@ A high-performance, asynchronous FastAPI backend and interactive Streamlit web d
 ocr-api/
 ├── app/
 │   ├── main.py                  # FastAPI Application Entrypoint (Port 8200)
-│   ├── config.py                # Environment & Service Settings
+│   ├── config.py                # Service, Database & Webhook Configuration
+│   ├── db/
+│   │   ├── __init__.py          # Database exports
+│   │   ├── session.py           # Async Database Session & Engine Pool
+│   │   └── models.py            # SQLAlchemy Models (Batches, Jobs, WebhookDeliveries)
 │   ├── routers/
-│   │   ├── chat_router.py       # Image Chat & Multimodal Streaming Endpoints
-│   │   ├── job_router.py        # Async Batch Jobs, Status Polling & Webhooks
-│   │   └── health_router.py     # System Healthcheck & LLM Discovery
+│   │   ├── ocr_router.py        # Synchronous & Streaming Single OCR Endpoints
+│   │   ├── batch_router.py      # Enterprise Multi-Document Batch API
+│   │   ├── job_router.py        # Single Async Jobs, Polling & Downloads
+│   │   ├── chat_router.py       # Multi-modal Chat & OpenAI-Compatible Completions
+│   │   └── health_router.py     # System, Database & LLM Engine Health Check
 │   ├── services/
-│   │   ├── llm_client.py        # Direct Ollama & llama-cpp Async Client
-│   │   ├── image_processor.py   # PDF Rendering & Image Optimization
-│   │   └── job_service.py      # Async Background Job Engine
-│   └── schemas/                 # Pydantic Schemas for Requests & Responses
+│   │   ├── llm_client.py        # Direct Ollama & llama-cpp Async Client with JSON mode
+│   │   ├── image_processor.py   # Hybrid OCR & Multi-page PDF Rendering
+│   │   ├── schema_validator.py  # JSON Auto-repair & Pydantic Schema Validator
+│   │   ├── webhook_dispatcher.py # HMAC-SHA256 Signed Webhook Engine
+│   │   ├── job_service.py       # Database-Backed Async Job Engine
+│   │   └── batch_service.py     # Multi-Document Batch Engine & ZIP Exporter
+│   └── schemas/                 # Pydantic Schemas (Medical, Batch, OCR, Job, Chat)
 ├── ui/
-│   └── streamlit_app.py         # Streamlit Interactive Web Dashboard (Port 8600)
+│   └── streamlit_app.py         # Streamlit Web Studio (Port 8600)
 ├── pdf/                         # Sample Medical Lab Reports (EGFR, FBC, Lipid, Bilirubin)
+├── tests/                       # Unit & Integration Test Suites
 ├── .env                         # Environment Configuration File
 ├── requirements.txt             # Python Dependencies
 └── README.md                    # Documentation
@@ -53,135 +72,79 @@ ocr-api/
 
 ### 1. Prerequisites & Installation
 
-Ensure you have Python 3.10+ installed along with local LLM server engines (Ollama or llama-server).
-
 ```bash
 # Clone repository and enter directory
 cd ocr-api
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies (using conda 'stt' environment)
+conda run -n stt pip install -r requirements.txt
 ```
 
 ### 2. Configure Environment (`.env`)
-
-Create or edit `.env` in the root directory:
 
 ```env
 PORT=8200
 HOST=0.0.0.0
 DEFAULT_BACKEND=ollama
-DEFAULT_MODEL=gemma4:latest
+DEFAULT_MODEL=qwen2.5vl:latest
 OLLAMA_URL=http://localhost:11434
 LLAMA_CPP_URL=http://localhost:8080
+DATABASE_URL=sqlite+aiosqlite:///./ocr.db # Or postgresql+asyncpg://user:pass@localhost:5432/ocr_db
+MAX_CONCURRENT_WORKERS=4
+MAX_BATCH_SIZE=100
+WEBHOOK_SECRET=ocr-webhook-secret-key-369
 STREAMLIT_PORT=8600
-MAX_IMAGE_SIZE_PX=1280
-IMAGE_JPEG_QUALITY=85
 ```
 
 ### 3. Launch Services
 
 #### Start FastAPI API Backend (Port 8200)
 ```bash
-python app/main.py
+conda run -n stt python app/main.py
 ```
 
-#### Start Streamlit Web UI (Port 8600)
+#### Start Streamlit Web Studio (Port 8600)
 ```bash
-streamlit run ui/streamlit_app.py --server.port 8600
+conda run -n stt streamlit run ui/streamlit_app.py --server.port 8600
 ```
 
-Access the Web Dashboard at: `http://localhost:8600`  
-Access API Documentation (Swagger) at: `http://localhost:8200/docs`
+Access Web Dashboard: `http://localhost:8600`  
+Access API Documentation (Swagger): `http://localhost:8200/docs`
 
 ---
 
-## 📡 API Usage & Endpoints
+## 📡 API Endpoints Overview
 
-### 1. Interactive Image Chat (Upload File & Query)
+### 1. Direct Single Document OCR
+- **`POST /api/v1/ocr/sync`**: Synchronous OCR extraction returning structured JSON.
+- **`POST /api/v1/ocr/stream`**: Real-time SSE streaming of OCR transcriptions.
+- **`POST /api/v1/ocr/upload`**: Multipart file upload direct OCR extraction.
 
-**Endpoint**: `POST /api/v1/image-chat/upload`
+### 2. Enterprise Multi-Document Batch Processing
+- **`POST /api/v1/batches`**: Submit a batch of Base64 documents or URLs.
+- **`POST /api/v1/batches/upload`**: Multipart upload of multiple PDF/image files.
+- **`GET /api/v1/batches`**: Paginated list of recent batches.
+- **`GET /api/v1/batches/{batch_id}`**: Real-time batch progress (% completed, processed/failed count).
+- **`GET /api/v1/batches/{batch_id}/jobs`**: Detailed status and JSON extractions for every job in batch.
+- **`GET /api/v1/batches/{batch_id}/download?format=json|zip`**: Consolidated batch JSON or ZIP download.
 
-```bash
-curl -X POST "http://localhost:8200/api/v1/image-chat/upload" \
-  -F "file=@pdf/FBC.pdf" \
-  -F "prompt=Extract all test names, values, units, and reference ranges as JSON." \
-  -F "backend=ollama" \
-  -F "model=gemma4:latest"
-```
-
----
-
-### 2. Submit Async Batch Job
-
-**Endpoint**: `POST /api/v1/jobs/upload`
-
-```bash
-curl -X POST "http://localhost:8200/api/v1/jobs/upload" \
-  -F "file=@pdf/LIPID PROFILE.pdf" \
-  -F "prompt=Extract patient details and lipid panel results." \
-  -F "backend=ollama" \
-  -F "model=gemma4:latest"
-```
-
-**Response**:
-```json
-{
-  "job_id": "job_78d47f752be4",
-  "status": "pending",
-  "backend": "ollama",
-  "model": "gemma4:latest",
-  "created_at": "2026-08-14T10:40:00"
-}
-```
-
----
-
-### 3. Poll Job Status & Extracted Data
-
-**Endpoint**: `GET /api/v1/jobs/{job_id}`
-
-```bash
-curl -X GET "http://localhost:8200/api/v1/jobs/job_78d47f752be4"
-```
-
----
-
-### 4. Download Processed Report Result
-
-**Endpoint**: `GET /api/v1/jobs/{job_id}/download?format=json`
-
-```bash
-curl -X GET "http://localhost:8200/api/v1/jobs/job_78d47f752be4/download?format=json" \
-  -o report_result.json
-```
+### 3. Single Background Jobs
+- **`POST /api/v1/jobs`**: Submit a single document for background processing.
+- **`GET /api/v1/jobs/{job_id}`**: Get job status and result.
+- **`GET /api/v1/jobs/{job_id}/download`**: Download processed report output.
 
 ---
 
 ## 🧪 Testing & Verification
 
-Run automated test scripts from the scratch tools directory:
+Run the comprehensive unit & integration test suites:
 
 ```bash
-# Test direct Ollama connection & gemma4 completion
-PYTHONPATH=. python /home/adhidevx369-work/.gemini/antigravity-ide/brain/c6ac56d0-0940-450b-aab1-ff42ddfc9a0e/scratch/test_fix_entirely.py
-
-# Test batch processing on pdf/ directory reports
-PYTHONPATH=. python /home/adhidevx369-work/.gemini/antigravity-ide/brain/c6ac56d0-0940-450b-aab1-ff42ddfc9a0e/scratch/test_batch_jobs.py
+conda run -n stt python -m unittest tests/test_production_vocr_suite.py
+conda run -n stt python -m unittest tests/test_api_endpoints.py
 ```
 
 ---
 
-## 🩺 Supported Sample Lab Reports
-
-The `pdf/` directory contains sample lab reports for testing:
-- **`EGFR.pdf`**: Serum Creatinine & Estimated Glomerular Filtration Rate.
-- **`FBC.pdf`**: Full Blood Count (WBC, Neutrophils, Lymphocytes, Hb, Platelets).
-- **`LIPID PROFILE.pdf`**: Lipid Panel (Total Cholesterol, Triglycerides, HDL, LDL, VLDL).
-- **`S.BILIRUBIN.pdf`**: Serum Bilirubin (Total, Direct, Indirect).
-
----
-
 ## 📜 License
-
-MIT License. Free for development and deployment.
+MIT License. Free for development and production deployment.

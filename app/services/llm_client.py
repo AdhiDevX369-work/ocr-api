@@ -191,9 +191,11 @@ class LLMClient:
                 return m["id"]
 
         # 4. Fallback to first model in list
-        first_model = model_ids[0]
-        logger.info(f"ℹ️ Selected default available model '{first_model}' on [{target_backend}]")
-        return first_model
+        if available_models:
+            first_model = available_models[0].get("id", self.default_model)
+            logger.info(f"ℹ️ Selected default available model '{first_model}' on [{target_backend}]")
+            return first_model
+        return self.default_model
 
     def _convert_to_ollama_payload(
         self,
@@ -201,7 +203,8 @@ class LLMClient:
         model: Optional[str] = None,
         temperature: float = 0.0,
         max_tokens: Optional[int] = 2048,
-        stream: bool = False
+        stream: bool = False,
+        json_mode: bool = False
     ) -> Dict[str, Any]:
         """Converts OpenAI format messages to native Ollama format for /api/chat fallback."""
         ollama_msgs = []
@@ -242,7 +245,10 @@ class LLMClient:
                 "num_predict": max_tokens if max_tokens else 8192
             }
         }
+        if json_mode:
+            payload["format"] = "json"
         return payload
+
 
     async def check_health(self) -> Dict[str, Any]:
         """Performs connection & model discovery checks concurrently against llama.cpp & Ollama backends."""
@@ -298,7 +304,8 @@ class LLMClient:
         backend: Optional[str] = None,
         temperature: float = 0.0,
         max_tokens: Optional[int] = 2048,
-        stream: bool = False
+        stream: bool = False,
+        json_mode: bool = False
     ) -> Dict[str, Any]:
         target_backend = backend or self.default_backend
         backend_url = self.get_backend_url(target_backend)
@@ -327,7 +334,8 @@ class LLMClient:
                 model=selected_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                stream=False
+                stream=False,
+                json_mode=json_mode
             )
             max_retries = 10
             for attempt in range(max_retries):
@@ -370,6 +378,8 @@ class LLMClient:
         }
         if max_tokens:
             openai_payload["max_tokens"] = max_tokens
+        if json_mode:
+            openai_payload["response_format"] = {"type": "json_object"}
 
         try:
             resp = await client.post(f"{backend_url}/v1/chat/completions", json=openai_payload, headers=headers, timeout=self._get_timeout())
@@ -403,7 +413,8 @@ class LLMClient:
         model: Optional[str] = None,
         backend: Optional[str] = None,
         temperature: float = 0.0,
-        max_tokens: Optional[int] = 2048
+        max_tokens: Optional[int] = 2048,
+        json_mode: bool = False
     ) -> AsyncGenerator[str, None]:
         target_backend = backend or self.default_backend
         backend_url = self.get_backend_url(target_backend)
@@ -432,8 +443,10 @@ class LLMClient:
                 model=selected_model,
                 temperature=temperature,
                 max_tokens=max_tokens,
-                stream=True
+                stream=True,
+                json_mode=json_mode
             )
+
             max_retries = 10
             for attempt in range(max_retries):
                 try:
