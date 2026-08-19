@@ -115,18 +115,21 @@ with st.sidebar:
     default_backend_idx = backend_options.index(settings.default_backend) if settings.default_backend in backend_options else 0
     backend = st.selectbox("LLM Backend", options=backend_options, index=default_backend_idx)
     
-    known_models = ["qwen2.5vl:latest", "qwen3-vl:4b", "qwen2.5:7b", "llama3.1:latest", "mistral:latest"]
-    default_model_val = settings.default_model if settings.default_model in known_models else "qwen2.5vl:latest"
-    default_model_idx = known_models.index(default_model_val) if default_model_val in known_models else 0
+    env_model = settings.default_model
+    known_models = ["ministral-3:latest", "qwen3-vl:4b", "mistral:latest", "llama3.1:latest", "gemma4:latest", "qwen3.5:4b-ctx128k"]
+    if env_model and env_model not in known_models:
+        known_models.insert(0, env_model)
+
+    default_model_idx = known_models.index(env_model) if env_model in known_models else 0
 
     selected_model_option = st.selectbox(
-        "Vision Model",
+        "Vision / LLM Model",
         options=known_models + ["Custom..."],
         index=default_model_idx,
-        help="qwen2.5vl:latest is fast with zero thinking delay. qwen3-vl:4b is reasoning model."
+        help=f"Active default model configured in .env: '{env_model}'"
     )
     if selected_model_option == "Custom...":
-        model_name = st.text_input("Custom Model Name", value=settings.default_model)
+        model_name = st.text_input("Custom Model Name", value=env_model)
     else:
         model_name = selected_model_option
 

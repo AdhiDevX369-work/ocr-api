@@ -69,6 +69,53 @@ class SchemaValidator:
         return cleaned
 
     @classmethod
+    def normalize_keys(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Maps common LLM JSON output key variations to standard Pydantic schema keys."""
+        if not isinstance(data, dict):
+            return data
+
+        normalized = dict(data)
+
+        # 1. Normalize report_title
+        if "report_title" not in normalized or not normalized["report_title"]:
+            for alt_key in ["title", "report_name", "test_title", "test_name", "name"]:
+                if alt_key in normalized and normalized[alt_key]:
+                    normalized["report_title"] = str(normalized[alt_key])
+                    break
+
+        # 2. Normalize patient_info
+        if "patient_info" not in normalized or not normalized["patient_info"]:
+            for alt_key in ["patient_details", "patient_metadata", "patient", "patient_data"]:
+                if alt_key in normalized and isinstance(normalized[alt_key], dict):
+                    normalized["patient_info"] = normalized[alt_key]
+                    break
+
+        # 3. Normalize investigations
+        if "investigations" not in normalized or not normalized["investigations"]:
+            for alt_key in ["results", "test_results", "parameters", "tests", "items"]:
+                if alt_key in normalized and isinstance(normalized[alt_key], list):
+                    normalized["investigations"] = normalized[alt_key]
+                    break
+
+        # 4. Normalize patient_info subfields
+        if isinstance(normalized.get("patient_info"), dict):
+            pinfo = dict(normalized["patient_info"])
+            if "name" in pinfo and "patient_name" not in pinfo:
+                pinfo["patient_name"] = pinfo["name"]
+            if "id" in pinfo and "pid_no" not in pinfo:
+                pinfo["pid_no"] = pinfo["id"]
+            if "ref_dr" in pinfo and "reference_dr" not in pinfo:
+                pinfo["reference_dr"] = pinfo["ref_dr"]
+            # Coerce int/float age and pid_no to str to prevent pydantic type errors
+            if "age" in pinfo and pinfo["age"] is not None:
+                pinfo["age"] = str(pinfo["age"])
+            if "pid_no" in pinfo and pinfo["pid_no"] is not None:
+                pinfo["pid_no"] = str(pinfo["pid_no"])
+            normalized["patient_info"] = pinfo
+
+        return normalized
+
+    @classmethod
     def parse_and_validate(
         cls,
         raw_text: str,
@@ -98,11 +145,11 @@ class SchemaValidator:
         # If schema validation is requested
         if target_schema and isinstance(parsed, dict):
             try:
-                validated_model = target_schema.model_validate(parsed)
+                normalized_parsed = cls.normalize_keys(parsed)
+                validated_model = target_schema.model_validate(normalized_parsed)
                 return validated_model.model_dump(), None
             except ValidationError as val_err:
                 logger.warning(f"Schema validation soft warning (returning raw parsed dict): {val_err}")
-                # Return parsed dict with error note rather than failing entirely
                 return parsed, None
 
         return parsed, None

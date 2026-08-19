@@ -148,7 +148,7 @@ class LLMClient:
             logger.info(f"🤖 No models returned by [{target_backend}], using fallback model: '{fallback}'")
             return fallback
 
-        vision_keywords = ["qwen2.5vl", "qwen2.5-vl", "vl", "vision", "llava", "moondream", "gemma4", "minicpm-v", "llama3.2-vision", "bakllava"]
+        vision_keywords = ["ministral-3", "ministral", "pixtral", "qwen2.5vl", "qwen2.5-vl", "qwen3-vl", "qwen3vl", "vl", "vision", "llava", "moondream", "gemma4", "minicpm-v", "llama3.2-vision", "bakllava"]
 
         # 1. If has_images=True, verify requested model supports vision or select a vision-capable model
         if has_images:
@@ -236,12 +236,13 @@ class LLMClient:
             "model": model or self.default_model,
             "messages": ollama_msgs,
             "stream": stream,
-            "keep_alive": "30m",
+            "keep_alive": settings.ollama_keep_alive,
             "options": {
-                "temperature": temperature,
+                "temperature": max(temperature, 0.1) if temperature == 0.0 else temperature,
+                "repeat_penalty": 1.1,
                 "num_gpu": 99,
                 "num_thread": 8,
-                "num_ctx": 32768,
+                "num_ctx": settings.ollama_num_ctx,
                 "num_predict": max_tokens if max_tokens else 8192
             }
         }
@@ -249,6 +250,40 @@ class LLMClient:
             payload["format"] = "json"
         return payload
 
+    async def warmup_model(self, backend: Optional[str] = None, model: Optional[str] = None):
+        """Asynchronously warm up / preload the vision model into VRAM."""
+        target_backend = backend or self.default_backend
+        selected_model = await self.pick_model(backend=target_backend, requested_model=model or self.default_model, has_images=True)
+        logger.info(f"🔥 Pre-loading / Warming up vision model '{selected_model}' on [{target_backend}]...")
+        try:
+            if target_backend == "ollama":
+                client = await self.get_client()
+                headers = {"Content-Type": "application/json"}
+                if settings.llm_api_key:
+                    headers["x-api-key"] = settings.llm_api_key
+                warmup_payload = {
+                    "model": selected_model,
+                    "messages": [{"role": "user", "content": "warmup"}],
+                    "stream": False,
+                    "keep_alive": settings.ollama_keep_alive,
+                    "options": {
+                        "num_gpu": 99,
+                        "num_ctx": settings.ollama_num_ctx,
+                        "num_predict": 1
+                    }
+                }
+                resp = await client.post(
+                    f"{self.ollama_url}/api/chat",
+                    json=warmup_payload,
+                    headers=headers,
+                    timeout=60.0
+                )
+                if resp.status_code == 200:
+                    logger.info(f"⚡ Vision model '{selected_model}' successfully pre-loaded into GPU VRAM!")
+                else:
+                    logger.warning(f"⚠️ Model warmup returned HTTP {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.warning(f"⚠️ Model warmup encountered an issue: {e}")
 
     async def check_health(self) -> Dict[str, Any]:
         """Performs connection & model discovery checks concurrently against llama.cpp & Ollama backends."""

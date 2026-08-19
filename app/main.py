@@ -2,6 +2,7 @@ import sys
 import os
 import uuid
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 # Add workspace root to sys.path
@@ -28,6 +29,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"💾 Initializing Database ({settings.database_url})...")
     await init_db()
     logger.info(f"🔗 Direct Backends: llama-cpp ({settings.llama_cpp_url}), Ollama ({settings.ollama_url}) | Default: {settings.default_backend}")
+    # Trigger background model pre-loading (warmup into VRAM)
+    asyncio.create_task(llm_client.warmup_model())
     yield
     logger.info("🛑 Shutting down API service & closing active connections...")
     await llm_client.close()
