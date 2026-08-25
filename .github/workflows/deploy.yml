@@ -11,6 +11,7 @@ jobs:
   deploy:
     name: Deploy to Production VM
     runs-on: ubuntu-latest
+    environment: test
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -24,20 +25,20 @@ jobs:
           port: 22
           script_stop: true
           script: |
-            echo "🚀 Starting Automated Deployment on VM..."
+            echo "Starting automated deployment on VM..."
             sudo su - ml-dev-user -c "
               set -e
               cd /home/ml-dev-user/ocr-api
-              echo '📥 Pulling latest code...'
+              echo 'Pulling latest code from origin...'
               git fetch origin
               BRANCH=\$(git rev-parse --abbrev-ref HEAD)
               git reset --hard origin/\$BRANCH
-              echo '📦 Updating Python dependencies in laiagent conda env...'
+              echo 'Updating dependencies in laiagent conda environment...'
               /home/ml-dev-user/miniconda3/envs/laiagent/bin/pip install -r requirements.txt
             "
-            echo "🔄 Restarting OCR API Service..."
+            echo "Restarting OCR API systemd service..."
             sudo systemctl restart ocr-api
             sleep 3
-            echo "🩺 Verifying Health Endpoint..."
-            curl -s -f http://localhost:8200/health || (echo '❌ Health check failed' && exit 1)
-            echo "✅ Deployment completed successfully!"
+            echo "Verifying health endpoint..."
+            curl -s -f http://localhost:8200/ocr/health || (echo 'Health check failed' && exit 1)
+            echo "Deployment completed successfully."
