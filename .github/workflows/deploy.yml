@@ -1,0 +1,43 @@
+name: CI/CD Pipeline - Deploy to GCP GPU VM
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Production VM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Remote VM via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST || '34.14.151.184' }}
+          username: ${{ secrets.VM_USER || 'aiagent_user' }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            echo "🚀 Starting Automated Deployment on VM..."
+            sudo su - ml-dev-user -c "
+              set -e
+              cd /home/ml-dev-user/ocr-api
+              echo '📥 Pulling latest code...'
+              git fetch origin
+              BRANCH=\$(git rev-parse --abbrev-ref HEAD)
+              git reset --hard origin/\$BRANCH
+              echo '📦 Updating Python dependencies...'
+              ./venv/bin/pip install -r requirements.txt
+            "
+            echo "🔄 Restarting OCR API Service..."
+            sudo systemctl restart ocr-api
+            sleep 3
+            echo "🩺 Verifying Health Endpoint..."
+            curl -s -f http://localhost:8200/health || (echo '❌ Health check failed' && exit 1)
+            echo "✅ Deployment completed successfully!"

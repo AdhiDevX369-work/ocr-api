@@ -15,7 +15,7 @@ from app.services.image_processor import ImageProcessor, ImageProcessingError
 
 logger = logging.getLogger("batch-router")
 
-router = APIRouter(prefix="/api/v1/batches", tags=["Enterprise Batch Processing"])
+router = APIRouter(tags=["Enterprise Batch Processing"])
 
 @router.post(
     "",

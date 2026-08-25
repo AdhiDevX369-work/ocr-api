@@ -21,8 +21,14 @@ SSE_HEADERS = {
     "Content-Type": "text/event-stream",
 }
 
-router = APIRouter(prefix="/api/v1/ocr", tags=["Direct Vision OCR (Single Processing)"])
+router = APIRouter(tags=["Direct Vision OCR (Single Processing)"])
 
+@router.post(
+    "",
+    response_model=OCRResponse,
+    summary="Synchronous Direct Vision OCR (Default)",
+    description="Processes a single PDF document or image scan synchronously and returns structured JSON or Markdown text."
+)
 @router.post(
     "/sync",
     response_model=OCRResponse,

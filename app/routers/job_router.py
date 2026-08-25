@@ -9,7 +9,7 @@ from app.services.image_processor import ImageProcessor, ImageProcessingError
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/jobs", tags=["Async Document Jobs & Webhooks"])
+router = APIRouter(tags=["Async Document Jobs & Webhooks"])
 
 @router.post(
     "",

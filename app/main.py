@@ -63,11 +63,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers
+# Include Routers (Unified Clean /api and /api/v1 compatibility)
 app.include_router(health_router.router)
-app.include_router(ocr_router.router)
-app.include_router(batch_router.router)
-app.include_router(job_router.router)
+app.include_router(ocr_router.router, prefix="/api/ocr")
+app.include_router(ocr_router.router, prefix="/api/v1/ocr")
+app.include_router(batch_router.router, prefix="/api/batch")
+app.include_router(batch_router.router, prefix="/api/batches")
+app.include_router(batch_router.router, prefix="/api/v1/batches")
+app.include_router(job_router.router, prefix="/api/jobs")
+app.include_router(job_router.router, prefix="/api/v1/jobs")
 app.include_router(chat_router.router)
 
 @app.get("/", summary="Root API Info")
@@ -80,13 +84,15 @@ async def root():
         "docs_url": "/docs",
         "endpoints": {
             "health": "/health",
-            "ocr_sync": "/api/v1/ocr/sync",
-            "ocr_stream": "/api/v1/ocr/stream",
-            "ocr_upload": "/api/v1/ocr/upload",
-            "batches": "/api/v1/batches",
-            "batches_upload": "/api/v1/batches/upload",
-            "jobs": "/api/v1/jobs",
-            "chat": "/api/v1/image-chat"
+            "ocr": "/api/ocr",
+            "ocr_sync": "/api/ocr/sync",
+            "ocr_stream": "/api/ocr/stream",
+            "ocr_upload": "/api/ocr/upload",
+            "batch": "/api/batch",
+            "batch_upload": "/api/batch/upload",
+            "batches": "/api/batches",
+            "jobs": "/api/jobs",
+            "chat": "/api/chat"
         }
     }
 
