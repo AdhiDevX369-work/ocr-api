@@ -28,8 +28,10 @@ A high-performance, asynchronous FastAPI platform, SQLAlchemy persistence engine
 
 ---
 
-## 2. Documentation
+## 2. Documentation & Tooling
 
+- **Postman API Collection**: [postman/Vision_OCR_Platform.postman_collection.json](file:///Users/adithyabandara/ofiice/ocr-api/postman/Vision_OCR_Platform.postman_collection.json)
+- **Postman Environment**: [postman/Vision_OCR_Environment.postman_environment.json](file:///Users/adithyabandara/ofiice/ocr-api/postman/Vision_OCR_Environment.postman_environment.json)
 - **API Guidance & Integration Reference**: [docs/API_GUIDANCE.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/API_GUIDANCE.md)
 - **Data Flow Diagrams (Level 0, 1, 2)**: [docs/DATA_FLOW_DIAGRAMS.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/DATA_FLOW_DIAGRAMS.md)
 - **Detailed System Architecture**: [docs/ARCHITECTURE.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/ARCHITECTURE.md)

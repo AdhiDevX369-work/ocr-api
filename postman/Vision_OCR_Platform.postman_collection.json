@@ -1,0 +1,509 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Vision OCR & Batch API Platform",
+    "description": "Comprehensive Postman API Collection for the Production Vision OCR and Batch Processing Platform with support for direct vision extractions, real-time streaming, enterprise batching, and multimodal chat.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://aiagent.monoroc.com",
+      "type": "string"
+    },
+    {
+      "key": "batchId",
+      "value": "batch_d533c96410d6",
+      "type": "string"
+    },
+    {
+      "key": "jobId",
+      "value": "job_0dc2646623e0",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Health & Service Telemetry",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ocr/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "health"]
+            },
+            "description": "Inspects system health, database readiness, and active GPU vision inference backends."
+          },
+          "response": []
+        },
+        {
+          "name": "Root Service Info",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ocr",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr"]
+            },
+            "description": "Returns metadata, version, and endpoints overview."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Direct Vision OCR",
+      "item": [
+        {
+          "name": "Direct Synchronous OCR (JSON Payload)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"prompt\": \"Extract all patient and clinical data into structured JSON with 100% precision.\",\n  \"system_prompt\": \"You are an expert Clinical Lab Report Data Extractor.\",\n  \"format\": \"json\",\n  \"backend\": \"ollama\",\n  \"model\": \"ministral-3:latest\",\n  \"temperature\": 0.0,\n  \"max_tokens\": 4096\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/ocr",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "ocr"]
+            },
+            "description": "Direct synchronous OCR from a Base64 data URI or public document URL."
+          },
+          "response": []
+        },
+        {
+          "name": "Real-Time Streaming OCR (SSE)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"prompt\": \"Extract all values from this document scan.\",\n  \"backend\": \"ollama\",\n  \"model\": \"ministral-3:latest\",\n  \"temperature\": 0.0\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/ocr/stream",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "ocr", "stream"]
+            },
+            "description": "Streams real-time OCR transcription tokens using Server-Sent Events (SSE)."
+          },
+          "response": []
+        },
+        {
+          "name": "Multipart File Upload OCR",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Select a PDF lab report or Image file"
+                },
+                {
+                  "key": "format",
+                  "value": "json",
+                  "type": "text"
+                },
+                {
+                  "key": "prompt",
+                  "value": "Extract all medical report data into structured JSON with 100% precision.",
+                  "type": "text"
+                },
+                {
+                  "key": "temperature",
+                  "value": "0.0",
+                  "type": "text"
+                },
+                {
+                  "key": "max_tokens",
+                  "value": "4096",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/ocr/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "ocr", "upload"]
+            },
+            "description": "Upload a PDF or image file directly for synchronous vision extraction."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Multi-modal Chat",
+      "item": [
+        {
+          "name": "Vision Chat Completion",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Transcribe any text found in this scan.\",\n  \"system_prompt\": \"You are a helpful assistant.\",\n  \"backend\": \"ollama\",\n  \"model\": \"ministral-3:latest\",\n  \"temperature\": 0.0,\n  \"images\": [\n    \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "chat"]
+            },
+            "description": "OpenAI-compatible multi-modal chat completion supporting vision base64 images."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Enterprise Batch Processing",
+      "item": [
+        {
+          "name": "Upload Multiple Files as Batch",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.batch_id) {",
+                  "        pm.collectionVariables.set('batchId', json.batch_id);",
+                  "        pm.environment.set('batchId', json.batch_id);",
+                  "        console.log('Saved batchId: ' + json.batch_id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "Select multiple PDF documents or Image files"
+                },
+                {
+                  "key": "name",
+                  "value": "Clinical_Batch_Lab_001",
+                  "type": "text"
+                },
+                {
+                  "key": "prompt",
+                  "value": "Extract all medical report data into structured JSON with 100% precision.",
+                  "type": "text"
+                },
+                {
+                  "key": "temperature",
+                  "value": "0.0",
+                  "type": "text"
+                },
+                {
+                  "key": "max_tokens",
+                  "value": "2048",
+                  "type": "text"
+                },
+                {
+                  "key": "webhook_url",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional webhook notification URL"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/batch/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "batch", "upload"]
+            },
+            "description": "Submits up to 100 PDF reports or image scans in a single multipart request. Auto-saves batchId."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Batch (JSON / URLs)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.batch_id) {",
+                  "        pm.collectionVariables.set('batchId', json.batch_id);",
+                  "        pm.environment.set('batchId', json.batch_id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"JSON_Batch_001\",\n  \"documents\": [\n    {\n      \"document\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n      \"name\": \"sample_scan_1.png\"\n    }\n  ],\n  \"prompt\": \"Extract all clinical data into structured JSON.\",\n  \"backend\": \"ollama\",\n  \"model\": \"ministral-3:latest\",\n  \"temperature\": 0.0,\n  \"max_tokens\": 2048\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/batch",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "batch"]
+            },
+            "description": "Submit a batch using Base64 data URIs or Cloud Storage URLs."
+          },
+          "response": []
+        },
+        {
+          "name": "List Recent Batches",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/batches?page=1&page_size=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "batches"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "page_size",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Retrieves a paginated list of recent batch jobs and progress metrics."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Batch Status & Metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/batch/{{batchId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "batch", "{{batchId}}"]
+            },
+            "description": "Polls real-time progress metrics (% complete, processed/failed count) for a batch."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Batch Jobs & Extracted JSONs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/batch/{{batchId}}/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "batch", "{{batchId}}", "jobs"]
+            },
+            "description": "Retrieves batch details and extracted clinical JSON objects for every individual document job."
+          },
+          "response": []
+        },
+        {
+          "name": "Download Batch Merged JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/batch/{{batchId}}/download?format=json",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "batch", "{{batchId}}", "download"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "json"
+                }
+              ]
+            },
+            "description": "Downloads all extractions for this batch consolidated into a single JSON file."
+          },
+          "response": []
+        },
+        {
+          "name": "Download Batch ZIP Archive",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/batch/{{batchId}}/download?format=zip",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "batch", "{{batchId}}", "download"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "zip"
+                }
+              ]
+            },
+            "description": "Downloads all extractions as a ZIP archive containing individual JSON files."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Single Background Jobs",
+      "item": [
+        {
+          "name": "Submit Single Background Job",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "    var json = pm.response.json();",
+                  "    if (json.job_id) {",
+                  "        pm.collectionVariables.set('jobId', json.job_id);",
+                  "        pm.environment.set('jobId', json.job_id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"document\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"prompt\": \"Extract all clinical parameters into JSON.\",\n  \"backend\": \"ollama\",\n  \"model\": \"ministral-3:latest\",\n  \"temperature\": 0.0,\n  \"max_tokens\": 2048\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/jobs",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "jobs"]
+            },
+            "description": "Submits an individual document for asynchronous background extraction."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Status & Result",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/ocr/api/jobs/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["ocr", "api", "jobs", "{{jobId}}"]
+            },
+            "description": "Retrieves the processing status, execution duration, and extracted clinical JSON for a single job."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
