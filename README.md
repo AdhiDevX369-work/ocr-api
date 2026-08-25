@@ -1,150 +1,169 @@
-# 🩺 Enterprise Medical Vision OCR (vOCR) & Batch Processing Platform
+# Production Vision OCR & Enterprise Batch Processing Platform
 
-A high-performance, asynchronous FastAPI backend, PostgreSQL/SQLite persistence engine, and interactive Streamlit web dashboard for medical report OCR, structured clinical JSON extraction, and high-throughput multi-document batch pipelines powered directly by local LLM engines (**Ollama** and **llama-server**).
-
----
-
-## 🌟 Key Features
-
-- **🚀 Direct Engine Connectivity**: Connects directly to high-throughput local LLM backends:
-  - **Ollama** (`http://localhost:11434`) – Recommended: `qwen2.5vl:latest` / `gemma4:latest`
-  - **llama.cpp / llama-server** (`http://localhost:8080`)
-  - **Gateway llm-server** (`http://localhost:8100`)
-- **⚡ Synchronous & Streaming Single OCR (`/api/v1/ocr/sync`, `/api/v1/ocr/stream`)**: Direct single-document extraction with real-time Server-Sent Events (SSE) streaming and Pydantic schema validation.
-- **📦 Enterprise Multi-Document Batch Processing (`/api/v1/batches`)**:
-  - Submit up to 100 PDF reports or image scans in a single batch API call.
-  - Track parent batch progress in real-time (`total_files`, `processed_files`, `failed_files`, `progress_percentage`).
-  - Download all results as a consolidated JSON or a ZIP archive containing individual JSON reports.
-- **🗄️ Resilient Database Persistence**:
-  - Backed by **SQLAlchemy 2.0 (Async)** with native **PostgreSQL** (`asyncpg`) and SQLite (`aiosqlite`) support.
-  - All batches, individual document jobs, and webhook delivery audit logs are permanently stored and queryable.
-- **📢 Resilient Webhook & Event Dispatcher**:
-  - Automatically emits `report.processed` and `batch.completed` events upon completion.
-  - Signed with **HMAC-SHA256** (`X-Signature-SHA256`) for security and authenticity.
-  - Automatic exponential backoff retries (up to 5 attempts).
-- **🧪 Structured JSON Auto-Repair & Schema Validator**:
-  - Validates and auto-repairs clinical report JSON structures against strict Pydantic schemas (`MedicalReportExtraction`).
-- **📄 High-DPI Hybrid Document Pipeline**:
-  - Direct digital text layer extraction via PyMuPDF.
-  - High-clarity multi-page rendering (150-200 DPI via `pypdfium2` / `PyMuPDF`).
-- **🖥️ Modern Streamlit Web Studio**:
-  - Dedicated tabs for Interactive Single Document OCR, Multi-Document Batch Studio with live progress bars, and Historical Batch Explorer.
+A high-performance, asynchronous FastAPI platform, SQLAlchemy persistence engine, and Streamlit dashboard for clinical document OCR, structured JSON extraction, and high-throughput multi-document batch pipelines powered directly by GPU-accelerated local Vision LLMs (**Ollama** / **ministral-3:latest**).
 
 ---
 
-## 📂 Project Structure
+## 1. System Capabilities
+
+- **Direct Vision Engine Connectivity**: Direct integration with local GPU inference backends:
+  - **Ollama** (`http://localhost:11434`) – Default Production Model: `ministral-3:latest`
+  - **llama.cpp / llama-server** (`http://localhost:8080` / `http://localhost:8081`)
+- **Synchronous & Streaming Single OCR (`/ocr/api/ocr`, `/ocr/api/ocr/stream`)**: Direct single-document extraction with real-time Server-Sent Events (SSE) streaming and strict Pydantic V2 schema validation.
+- **Enterprise Multi-Document Batch Processing (`/ocr/api/batch`)**:
+  - Submits up to 100 PDF lab reports or image scans in a single multipart request.
+  - Real-time batch progress tracking (`total_files`, `processed_files`, `failed_files`, `progress_percentage`).
+  - Downloads results as a consolidated JSON or a ZIP archive containing individual report files.
+- **Resilient Database Persistence**:
+  - Backed by **SQLAlchemy 2.0 (Async)** with native **SQLite** (`aiosqlite`) and **PostgreSQL** (`asyncpg`) support.
+  - Batches, individual document jobs, and webhook delivery audit logs are permanently stored and queryable.
+- **HMAC-SHA256 Webhook Dispatcher**:
+  - Emits `report.processed` and `batch.completed` events upon completion.
+  - Cryptographically signed with `X-Signature-SHA256` for integrity and authenticity.
+- **High-DPI Hybrid Ingestion Pipeline**:
+  - Multi-page PDF rendering at 2.1x DPI scale via `pypdfium2` / `PyMuPDF`.
+  - Automatic EXIF rotation, canvas stitching, and JPEG memory buffer optimization.
+- **Interactive Streamlit Web Dashboard**:
+  - Comprehensive UI for single-document streaming OCR, multi-file batch submissions, and historical report auditing.
+
+---
+
+## 2. Architecture & Documentation Links
+
+- **API Guidance & Integration Reference**: [docs/API_GUIDANCE.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/API_GUIDANCE.md)
+- **Data Flow Diagrams (Level 0, 1, 2)**: [docs/DATA_FLOW_DIAGRAMS.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/DATA_FLOW_DIAGRAMS.md)
+- **Detailed System Architecture**: [docs/ARCHITECTURE.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/ARCHITECTURE.md)
+
+---
+
+## 3. Production Routing & Domain Architecture
+
+All platform endpoints are mounted under the `/ocr` prefix and routed through Nginx on the production domain:
 
 ```text
-ocr-api/
-├── app/
-│   ├── main.py                  # FastAPI Application Entrypoint (Port 8200)
-│   ├── config.py                # Service, Database & Webhook Configuration
-│   ├── db/
-│   │   ├── __init__.py          # Database exports
-│   │   ├── session.py           # Async Database Session & Engine Pool
-│   │   └── models.py            # SQLAlchemy Models (Batches, Jobs, WebhookDeliveries)
-│   ├── routers/
-│   │   ├── ocr_router.py        # Synchronous & Streaming Single OCR Endpoints
-│   │   ├── batch_router.py      # Enterprise Multi-Document Batch API
-│   │   ├── job_router.py        # Single Async Jobs, Polling & Downloads
-│   │   ├── chat_router.py       # Multi-modal Chat & OpenAI-Compatible Completions
-│   │   └── health_router.py     # System, Database & LLM Engine Health Check
-│   ├── services/
-│   │   ├── llm_client.py        # Direct Ollama & llama-cpp Async Client with JSON mode
-│   │   ├── image_processor.py   # Hybrid OCR & Multi-page PDF Rendering
-│   │   ├── schema_validator.py  # JSON Auto-repair & Pydantic Schema Validator
-│   │   ├── webhook_dispatcher.py # HMAC-SHA256 Signed Webhook Engine
-│   │   ├── job_service.py       # Database-Backed Async Job Engine
-│   │   └── batch_service.py     # Multi-Document Batch Engine & ZIP Exporter
-│   └── schemas/                 # Pydantic Schemas (Medical, Batch, OCR, Job, Chat)
-├── ui/
-│   └── streamlit_app.py         # Streamlit Web Studio (Port 8600)
-├── pdf/                         # Sample Medical Lab Reports (EGFR, FBC, Lipid, Bilirubin)
-├── tests/                       # Unit & Integration Test Suites
-├── .env                         # Environment Configuration File
-├── requirements.txt             # Python Dependencies
-└── README.md                    # Documentation
+http://aiagent.monoroc.com/ocr/...  -->  Nginx (Port 80)  -->  FastAPI Service (Port 8200)
 ```
+
+### Core Endpoints Summary
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/ocr/health` | Service, database, and LLM backend health status |
+| `POST` | `/ocr/api/ocr` | Synchronous direct OCR data extraction |
+| `POST` | `/ocr/api/ocr/stream` | Real-time SSE token streaming OCR |
+| `POST` | `/ocr/api/ocr/upload` | Multipart single-file upload OCR |
+| `POST` | `/ocr/api/chat` | Multi-modal text and vision chat completion |
+| `POST` | `/ocr/api/chat/upload` | Multipart multi-modal chat upload |
+| `POST` | `/ocr/api/batch/upload` | Multipart multi-document batch submission |
+| `POST` | `/ocr/api/batch` | JSON payload batch submission (Base64 / URLs) |
+| `GET` | `/ocr/api/batches` | Paginated list of recent batches |
+| `GET` | `/ocr/api/batch/{id}` | Real-time batch progress metrics |
+| `GET` | `/ocr/api/batch/{id}/jobs` | Detailed job records and extracted JSON objects |
+| `GET` | `/ocr/api/batch/{id}/download` | Download consolidated batch JSON or ZIP archive |
+| `POST` | `/ocr/api/jobs` | Submit single asynchronous background job |
+| `GET` | `/ocr/api/jobs/{id}` | Retrieve single job status and result |
 
 ---
 
-## 🚀 Quickstart Guide
+## 4. Quickstart & Installation
 
-### 1. Prerequisites & Installation
+### 1. Prerequisites
+- Python 3.10+ or Conda (`laiagent` / `stt` environment)
+- Ollama with `ministral-3:latest` pulled on GPU
 
 ```bash
-# Clone repository and enter directory
-cd ocr-api
-
-# Install dependencies (using conda 'stt' environment)
-conda run -n stt pip install -r requirements.txt
+# Pull production model
+ollama pull ministral-3:latest
 ```
 
-### 2. Configure Environment (`.env`)
+### 2. Install Dependencies
+```bash
+cd ocr-api
+pip install -r requirements.txt
+```
 
-```env
+### 3. Environment Configuration (`.env`)
+```ini
 PORT=8200
 HOST=0.0.0.0
 DEFAULT_BACKEND=ollama
-DEFAULT_MODEL=qwen2.5vl:latest
+DEFAULT_MODEL=ministral-3:latest
 OLLAMA_URL=http://localhost:11434
 LLAMA_CPP_URL=http://localhost:8080
-DATABASE_URL=sqlite+aiosqlite:///./ocr.db # Or postgresql+asyncpg://user:pass@localhost:5432/ocr_db
+DATABASE_URL=sqlite+aiosqlite:///./ocr.db
 MAX_CONCURRENT_WORKERS=4
 MAX_BATCH_SIZE=100
 WEBHOOK_SECRET=ocr-webhook-secret-key-369
 STREAMLIT_PORT=8600
 ```
 
-### 3. Launch Services
+### 4. Running Locally
 
 #### Start FastAPI API Backend (Port 8200)
 ```bash
-conda run -n stt python app/main.py
+python3 app/main.py
+# Or with uvicorn directly:
+uvicorn app.main:app --host 0.0.0.0 --port 8200
 ```
 
 #### Start Streamlit Web Studio (Port 8600)
 ```bash
-conda run -n stt streamlit run ui/streamlit_app.py --server.port 8600
+streamlit run ui/streamlit_app.py --server.port 8600
 ```
 
-Access Web Dashboard: `http://localhost:8600`  
-Access API Documentation (Swagger): `http://localhost:8200/docs`
+- Web Dashboard: `http://localhost:8600`
+- Interactive API Documentation (Swagger): `http://localhost:8200/docs` or `http://aiagent.monoroc.com/ocr/docs`
 
 ---
 
-## 📡 API Endpoints Overview
+## 5. Production Daemon Configuration (Systemd)
 
-### 1. Direct Single Document OCR
-- **`POST /api/v1/ocr/sync`**: Synchronous OCR extraction returning structured JSON.
-- **`POST /api/v1/ocr/stream`**: Real-time SSE streaming of OCR transcriptions.
-- **`POST /api/v1/ocr/upload`**: Multipart file upload direct OCR extraction.
+On Ubuntu/Debian Linux production hosts:
 
-### 2. Enterprise Multi-Document Batch Processing
-- **`POST /api/v1/batches`**: Submit a batch of Base64 documents or URLs.
-- **`POST /api/v1/batches/upload`**: Multipart upload of multiple PDF/image files.
-- **`GET /api/v1/batches`**: Paginated list of recent batches.
-- **`GET /api/v1/batches/{batch_id}`**: Real-time batch progress (% completed, processed/failed count).
-- **`GET /api/v1/batches/{batch_id}/jobs`**: Detailed status and JSON extractions for every job in batch.
-- **`GET /api/v1/batches/{batch_id}/download?format=json|zip`**: Consolidated batch JSON or ZIP download.
+```ini
+# /etc/systemd/system/ocr-api.service
+[Unit]
+Description=Production Vision OCR & Chat API Service
+After=network.target ollama.service
 
-### 3. Single Background Jobs
-- **`POST /api/v1/jobs`**: Submit a single document for background processing.
-- **`GET /api/v1/jobs/{job_id}`**: Get job status and result.
-- **`GET /api/v1/jobs/{job_id}/download`**: Download processed report output.
+[Service]
+Type=simple
+User=ml-dev-user
+WorkingDirectory=/home/ml-dev-user/ocr-api
+ExecStart=/home/ml-dev-user/miniconda3/envs/laiagent/bin/uvicorn app.main:app --host 0.0.0.0 --port 8200
+Restart=always
+RestartSec=3
+EnvironmentFile=/home/ml-dev-user/ocr-api/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Control Commands:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ocr-api
+sudo systemctl status ocr-api
+sudo journalctl -u ocr-api -f
+```
 
 ---
 
-## 🧪 Testing & Verification
+## 6. Automated Testing & Verification
 
-Run the comprehensive unit & integration test suites:
+Run the automated direct PDF OCR test suite to verify health, single PDF extractions, and multi-document batch pipelines:
 
 ```bash
-conda run -n stt python -m unittest tests/test_production_vocr_suite.py
-conda run -n stt python -m unittest tests/test_api_endpoints.py
+conda run -n stt python3 scripts/test_vm_pdf_ocr.py
+```
+
+Run unit & router tests:
+```bash
+python3 -m unittest tests/test_production_vocr_suite.py
+python3 -m unittest tests/test_api_endpoints.py
 ```
 
 ---
 
-## 📜 License
-MIT License. Free for development and production deployment.
+## 7. License
+MIT License. Commercial and production deployment authorized.

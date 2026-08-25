@@ -1,72 +1,80 @@
-# 🩺 Medical Report OCR & Vision AI Architecture (A-Z Data Flow Guide)
+# Medical Report OCR & Vision AI Architecture
 
-## 📌 Executive Overview
+## Executive Overview
 
-This system is an enterprise-grade **Medical Lab Report OCR & Vision AI Data Extraction Pipeline**. It is designed to ingest lab reports (PDF documents or image scans) directly from **GCP Cloud Storage (`gs://` or GCS Signed URLs)**, HTTP public endpoints, direct file uploads, or Base64 URIs.
+This platform provides an enterprise-grade **Medical Lab Report OCR & Vision AI Data Extraction Pipeline**. It is designed to ingest lab reports (PDF documents or image scans) directly from Base64 URIs, multipart file uploads, HTTP public endpoints, or Cloud Storage URIs (`gs://` or GCS Signed URLs).
 
-It processes single or batch medical report jobs asynchronously, performs **1-to-1 print-level visual verification** using local Vision LLMs (Gemma 4 / Qwen 3.5), stores structured JSON outputs, and emits completion events via **PubSub / Webhooks** so downstream services can download the results immediately.
-
----
-
-## 🎨 Visual System Architecture Sequence Diagram
-
-![A-Z Architecture Sequence Diagram](file:///Users/adithyabandara/ofiice/ocr-api/docs/architecture_sequence_diagram.jpg)
-
-### Text Diagram Representation
-========================================================================================================
-                                🩺 END-TO-END OCR & VISION AI SYSTEM ARCHITECTURE
-========================================================================================================
-
- [1. INGESTION SOURCE]               [2. FASTAPI GATEWAY]               [3. DOCUMENT ENGINE]
- ┌──────────────────────┐            ┌──────────────────────┐           ┌──────────────────────┐
- │ GCP Cloud Storage    │            │ POST /api/v1/jobs    │           │ GCS/HTTP Downloader  │
- │ (gs://... / GCS Link)│───────────>│                      │──────────>│ (httpx)              │
- └──────────────────────┘            │                      │           └──────────┬───────────┘
- ┌──────────────────────┐            │ POST /api/v1/jobs/   │                      │
- │ Batch URLs Payload   │───────────>│      batch           │                      ▼
- │ (Array of GCS links) │            │                      │           ┌──────────────────────┐
- └──────────────────────┘            │                      │           │ PDF Rendering Engine │
- ┌──────────────────────┐            │ POST /api/v1/jobs/   │           │ (pypdfium2 / PyMuPDF)│
- │ Multipart File Upload│───────────>│      upload          │           └──────────┬───────────┘
- │ (PDF / Image scan)   │            └──────────────────────┘                      │
- └──────────────────────┘                       │                                  ▼
-                                                │                       ┌──────────────────────┐
-                                                │                       │ Multi-Page Stitcher &│
-                                                │                       │ Image Optimizer      │
-                                                │                       └──────────┬───────────┘
-                                                │                                  │
-                                                ▼                                  ▼
- [6. DOWNSTREAM CONSUMER]            [5. EVENT DISPATCHER]              [4. VISION LLM CORE]
- ┌──────────────────────┐            ┌──────────────────────┐           ┌──────────────────────┐
- │ EHR / Clinical DB    │            │ PubSub / Webhook     │           │ Local Vision Gateway │
- │ System               │<───────────│ Event Notification   │<──────────│ (Ollama Gemma 4)     │
- └──────────▲───────────┘            │ ("report.processed") │           │ (Temp: 0.0)          │
-            │                        └──────────────────────┘           └──────────────────────┘
-            │                                   │
-            └───────────────────────────────────┘
-              GET /api/v1/jobs/{job_id}/download
-========================================================================================================
-```
+It handles synchronous single-document extraction, real-time Server-Sent Events (SSE) token streaming, and high-throughput asynchronous multi-document batch pipelines powered directly by local Vision LLM engines (**Ollama** with `ministral-3:latest` / `qwen3.5`). All endpoints are unified under the `/ocr` prefix and exposed via Nginx Reverse Proxy on `http://aiagent.monoroc.com/ocr/...`.
 
 ---
 
-## 🏗️ 1. End-to-End System Architecture (Flowchart)
+## Architecture & Data Flow References
+
+- **Data Flow Diagrams (Level 0, 1, 2)**: See [DATA_FLOW_DIAGRAMS.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/DATA_FLOW_DIAGRAMS.md)
+- **API Specification & Guidance**: See [API_GUIDANCE.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/API_GUIDANCE.md)
+
+---
+
+## 1. End-to-End System Architecture
 
 ```mermaid
 flowchart TD
     subgraph Client ["Client and Ingestion Layer"]
-        A1["GCP Cloud Storage"]
-        A2["Batch Jobs Payload"]
-        A3["Direct Multipart Upload"]
-        A4["Streamlit Studio UI"]
+        A1["External Clients / EHR Systems"]
+        A2["Streamlit Web Studio (Port 8600)"]
+        A3["Direct Multipart PDF Uploads"]
     end
 
-    subgraph API ["FastAPI Gateway Port 8200"]
-        B1["POST /api/v1/jobs"]
-        B2["POST /api/v1/jobs/batch"]
-        B3["POST /api/v1/jobs/upload"]
-        B4["GET /api/v1/jobs/id/download"]
+    subgraph Proxy ["Nginx Reverse Proxy (Port 80)"]
+        N1["aiagent.monoroc.com/ocr/..."]
     end
+
+    subgraph API ["FastAPI Gateway (Port 8200)"]
+        B1["POST /ocr/api/ocr (Sync)"]
+        B2["POST /ocr/api/ocr/stream (SSE)"]
+        B3["POST /ocr/api/ocr/upload (Single Upload)"]
+        B4["POST /ocr/api/batch/upload (Batch Upload)"]
+        B5["GET /ocr/api/batch/id/jobs (Batch Details)"]
+        B6["GET /ocr/api/batch/id/download (Export)"]
+    end
+
+    subgraph Engine ["Document Processing Engine"]
+        C1["pypdfium2 High-DPI PDF Renderer"]
+        C2["Multi-page Document Canvas Stitcher"]
+        C3["EXIF Auto-Rotation & JPEG Optimizer"]
+    end
+
+    subgraph LLM ["Local Vision LLM Core"]
+        D1["Ollama GPU Engine (Port 11434)"]
+        D2["Model: ministral-3:latest (Deterministic Temp: 0.0)"]
+        D3["Structured Clinical JSON Transcription"]
+    end
+
+    subgraph Persistence ["Persistence & Events"]
+        E1["SQL Database (SQLite / PostgreSQL)"]
+        E2["HMAC-SHA256 Webhook Dispatcher"]
+    end
+
+    A1 --> N1
+    A2 --> N1
+    A3 --> N1
+    N1 --> API
+
+    B1 --> C1
+    B2 --> C1
+    B3 --> C1
+    B4 --> C1
+
+    C1 --> C2
+    C2 --> C3
+    C3 --> D1
+    D1 --> D2
+    D2 --> D3
+
+    D3 --> E1
+    E1 --> E2
+    E2 --> A1
+```
 
     subgraph Engine ["Document Processing Engine"]
         C1["GCS HTTP Downloader"]
