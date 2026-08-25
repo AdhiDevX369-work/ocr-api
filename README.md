@@ -1,22 +1,22 @@
-# Production Vision OCR & Enterprise Batch Processing Platform
+# Vision OCR & Batch Processing Platform
 
-A high-performance, asynchronous FastAPI platform, SQLAlchemy persistence engine, and Streamlit dashboard for clinical document OCR, structured JSON extraction, and high-throughput multi-document batch pipelines powered directly by GPU-accelerated local Vision LLMs (**Ollama** / **ministral-3:latest**).
+A high-performance, asynchronous FastAPI platform, SQLAlchemy persistence engine, and Streamlit dashboard for document OCR, structured JSON extraction, and high-throughput multi-document batch pipelines powered directly by local Vision LLM inference engines (**Ollama**).
 
 ---
 
 ## 1. System Capabilities
 
 - **Direct Vision Engine Connectivity**: Direct integration with local GPU inference backends:
-  - **Ollama** (`http://localhost:11434`) – Default Production Model: `ministral-3:latest`
+  - **Ollama** (`http://localhost:11434`) – Default Model: `ministral-3:latest`
   - **llama.cpp / llama-server** (`http://localhost:8080` / `http://localhost:8081`)
 - **Synchronous & Streaming Single OCR (`/ocr/api/ocr`, `/ocr/api/ocr/stream`)**: Direct single-document extraction with real-time Server-Sent Events (SSE) streaming and strict Pydantic V2 schema validation.
 - **Enterprise Multi-Document Batch Processing (`/ocr/api/batch`)**:
-  - Submits up to 100 PDF lab reports or image scans in a single multipart request.
+  - Submits up to 100 PDF reports or image scans in a single multipart request.
   - Real-time batch progress tracking (`total_files`, `processed_files`, `failed_files`, `progress_percentage`).
   - Downloads results as a consolidated JSON or a ZIP archive containing individual report files.
-- **Resilient Database Persistence**:
+- **Database Persistence**:
   - Backed by **SQLAlchemy 2.0 (Async)** with native **SQLite** (`aiosqlite`) and **PostgreSQL** (`asyncpg`) support.
-  - Batches, individual document jobs, and webhook delivery audit logs are permanently stored and queryable.
+  - Batches, individual document jobs, and webhook delivery audit logs are stored and queryable.
 - **HMAC-SHA256 Webhook Dispatcher**:
   - Emits `report.processed` and `batch.completed` events upon completion.
   - Cryptographically signed with `X-Signature-SHA256` for integrity and authenticity.
@@ -28,7 +28,7 @@ A high-performance, asynchronous FastAPI platform, SQLAlchemy persistence engine
 
 ---
 
-## 2. Architecture & Documentation Links
+## 2. Documentation
 
 - **API Guidance & Integration Reference**: [docs/API_GUIDANCE.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/API_GUIDANCE.md)
 - **Data Flow Diagrams (Level 0, 1, 2)**: [docs/DATA_FLOW_DIAGRAMS.md](file:///Users/adithyabandara/ofiice/ocr-api/docs/DATA_FLOW_DIAGRAMS.md)
@@ -36,15 +36,9 @@ A high-performance, asynchronous FastAPI platform, SQLAlchemy persistence engine
 
 ---
 
-## 3. Production Routing & Domain Architecture
+## 3. Endpoints Overview
 
-All platform endpoints are mounted under the `/ocr` prefix and routed through Nginx on the production domain:
-
-```text
-http://aiagent.monoroc.com/ocr/...  -->  Nginx (Port 80)  -->  FastAPI Service (Port 8200)
-```
-
-### Core Endpoints Summary
+All platform endpoints are mounted under the `/ocr` prefix:
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -65,19 +59,19 @@ http://aiagent.monoroc.com/ocr/...  -->  Nginx (Port 80)  -->  FastAPI Service (
 
 ---
 
-## 4. Quickstart & Installation
+## 4. Quickstart
 
 ### 1. Prerequisites
-- Python 3.10+ or Conda (`laiagent` / `stt` environment)
-- Ollama with `ministral-3:latest` pulled on GPU
+- Python 3.10+
+- Ollama with a vision model (e.g. `ministral-3:latest` or `qwen2.5vl:latest`)
 
 ```bash
-# Pull production model
 ollama pull ministral-3:latest
 ```
 
-### 2. Install Dependencies
+### 2. Installation
 ```bash
+git clone https://github.com/AdhiDevX369-work/ocr-api.git
 cd ocr-api
 pip install -r requirements.txt
 ```
@@ -93,68 +87,33 @@ LLAMA_CPP_URL=http://localhost:8080
 DATABASE_URL=sqlite+aiosqlite:///./ocr.db
 MAX_CONCURRENT_WORKERS=4
 MAX_BATCH_SIZE=100
-WEBHOOK_SECRET=ocr-webhook-secret-key-369
+WEBHOOK_SECRET=your-webhook-secret-key
 STREAMLIT_PORT=8600
 ```
 
-### 4. Running Locally
+### 4. Running the Platform
 
-#### Start FastAPI API Backend (Port 8200)
+#### Run API Backend (Port 8200)
 ```bash
-python3 app/main.py
-# Or with uvicorn directly:
-uvicorn app.main:app --host 0.0.0.0 --port 8200
+uvicorn app.main:app --host 0.0.0.0 --port 8200 --reload
 ```
 
-#### Start Streamlit Web Studio (Port 8600)
+#### Run Streamlit Web Dashboard (Port 8600)
 ```bash
 streamlit run ui/streamlit_app.py --server.port 8600
 ```
 
 - Web Dashboard: `http://localhost:8600`
-- Interactive API Documentation (Swagger): `http://localhost:8200/docs` or `http://aiagent.monoroc.com/ocr/docs`
+- Interactive API Documentation (Swagger): `http://localhost:8200/docs` or `http://localhost:8200/ocr/docs`
 
 ---
 
-## 5. Production Daemon Configuration (Systemd)
+## 5. Automated Testing
 
-On Ubuntu/Debian Linux production hosts:
-
-```ini
-# /etc/systemd/system/ocr-api.service
-[Unit]
-Description=Production Vision OCR & Chat API Service
-After=network.target ollama.service
-
-[Service]
-Type=simple
-User=ml-dev-user
-WorkingDirectory=/home/ml-dev-user/ocr-api
-ExecStart=/home/ml-dev-user/miniconda3/envs/laiagent/bin/uvicorn app.main:app --host 0.0.0.0 --port 8200
-Restart=always
-RestartSec=3
-EnvironmentFile=/home/ml-dev-user/ocr-api/.env
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Control Commands:
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart ocr-api
-sudo systemctl status ocr-api
-sudo journalctl -u ocr-api -f
-```
-
----
-
-## 6. Automated Testing & Verification
-
-Run the automated direct PDF OCR test suite to verify health, single PDF extractions, and multi-document batch pipelines:
+Run the automated direct PDF OCR test suite to verify endpoints, single PDF extractions, and multi-document batch pipelines:
 
 ```bash
-conda run -n stt python3 scripts/test_vm_pdf_ocr.py
+python3 scripts/test_vm_pdf_ocr.py
 ```
 
 Run unit & router tests:
@@ -165,5 +124,5 @@ python3 -m unittest tests/test_api_endpoints.py
 
 ---
 
-## 7. License
-MIT License. Commercial and production deployment authorized.
+## 6. License
+MIT License.
