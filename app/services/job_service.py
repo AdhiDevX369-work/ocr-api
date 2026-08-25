@@ -120,7 +120,7 @@ class JobService:
         async with self._semaphore:
             start_time = time.monotonic()
             started_at_dt = datetime.now(timezone.utc)
-            logger.info(f"🔄 [Job {job_id}] Worker started processing...")
+            logger.info(f"[Job {job_id}] Worker started processing")
 
             # 1. Update status to PROCESSING in DB
             async with async_session_factory() as session:
@@ -197,7 +197,7 @@ class JobService:
                     )
                     await session.commit()
 
-                logger.info(f"✅ [Job {job_id}] Successfully finished in {duration}s")
+                logger.info(f"[Job {job_id}] Successfully completed in {duration}s")
 
                 # 7. Emit Webhook Event if configured
                 if webhook_url:
@@ -226,7 +226,7 @@ class JobService:
             except Exception as err:
                 duration = round(time.monotonic() - start_time, 2)
                 err_msg = str(err)
-                logger.error(f"❌ [Job {job_id}] Failed after {duration}s: {err_msg}")
+                logger.error(f"[Job {job_id}] Failed after {duration}s: {err_msg}")
                 completed_at_dt = datetime.now(timezone.utc)
 
                 async with async_session_factory() as session:

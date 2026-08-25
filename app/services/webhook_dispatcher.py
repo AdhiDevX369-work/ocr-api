@@ -74,7 +74,7 @@ class WebhookDispatcher:
         for attempt in range(1, max_retries + 1):
             attempts = attempt
             try:
-                logger.info(f"📢 [Event {event_id}] Dispatching '{event_type}' to {url} (attempt {attempt}/{max_retries})...")
+                logger.info(f"[Event {event_id}] Dispatching '{event_type}' to {url} (attempt {attempt}/{max_retries})")
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     resp = await client.post(url, content=payload_bytes, headers=headers)
                     last_status_code = resp.status_code
@@ -82,18 +82,18 @@ class WebhookDispatcher:
 
                     if resp.is_success:
                         delivered = True
-                        logger.info(f"✅ [Event {event_id}] Webhook successfully delivered to {url} (Status: {resp.status_code})")
+                        logger.info(f"[Event {event_id}] Webhook successfully delivered to {url} (Status: {resp.status_code})")
                         break
                     else:
-                        logger.warning(f"⚠️ [Event {event_id}] Webhook target returned HTTP {resp.status_code}: {last_response_text}")
+                        logger.warning(f"[Event {event_id}] Webhook target returned HTTP {resp.status_code}: {last_response_text}")
                         last_error = f"HTTP {resp.status_code}"
             except Exception as ex:
                 last_error = str(ex)
-                logger.warning(f"⚠️ [Event {event_id}] Webhook delivery attempt {attempt} failed: {ex}")
+                logger.warning(f"[Event {event_id}] Webhook delivery attempt {attempt} failed: {ex}")
 
             if attempt < max_retries:
                 delay = backoff_delays[min(attempt - 1, len(backoff_delays) - 1)]
-                logger.info(f"⏳ Backoff waiting {delay}s before retry...")
+                logger.info(f"[Event {event_id}] Backoff waiting {delay}s before retry")
                 await asyncio.sleep(delay)
 
         # Record delivery audit log in database

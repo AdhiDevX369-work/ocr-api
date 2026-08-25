@@ -25,14 +25,13 @@ logger = logging.getLogger("vocr-api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"🚀 Initializing Production Vision OCR & Batch API on port {settings.port}...")
-    logger.info(f"💾 Initializing Database ({settings.database_url})...")
+    logger.info(f"Initializing Vision OCR and Batch API service on port {settings.port}")
+    logger.info(f"Connecting to database ({settings.database_url})")
     await init_db()
-    logger.info(f"🔗 Direct Backends: llama-cpp ({settings.llama_cpp_url}), Ollama ({settings.ollama_url}) | Default: {settings.default_backend}")
-    # Trigger background model pre-loading (warmup into VRAM)
+    logger.info(f"Configured direct backends: llama-cpp ({settings.llama_cpp_url}), Ollama ({settings.ollama_url}) | Default backend: {settings.default_backend}")
     asyncio.create_task(llm_client.warmup_model())
     yield
-    logger.info("🛑 Shutting down API service & closing active connections...")
+    logger.info("Shutting down API service and releasing resources")
     await llm_client.close()
 
 app = FastAPI(
@@ -63,18 +62,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers (Unified Clean /api and /api/v1 compatibility)
+# Include Routers (Unified /ocr, /api, and /api/v1 prefixes)
 app.include_router(health_router.router)
+
+# OCR Router mounts
+app.include_router(ocr_router.router, prefix="/ocr/api/ocr")
+app.include_router(ocr_router.router, prefix="/ocr/api")
 app.include_router(ocr_router.router, prefix="/api/ocr")
 app.include_router(ocr_router.router, prefix="/api/v1/ocr")
+
+# Batch Router mounts
+app.include_router(batch_router.router, prefix="/ocr/api/batch")
+app.include_router(batch_router.router, prefix="/ocr/api/batches")
 app.include_router(batch_router.router, prefix="/api/batch")
 app.include_router(batch_router.router, prefix="/api/batches")
 app.include_router(batch_router.router, prefix="/api/v1/batches")
+
+# Job Router mounts
+app.include_router(job_router.router, prefix="/ocr/api/jobs")
+app.include_router(job_router.router, prefix="/ocr/api/job")
 app.include_router(job_router.router, prefix="/api/jobs")
 app.include_router(job_router.router, prefix="/api/v1/jobs")
+
+# Chat Router mount
 app.include_router(chat_router.router)
 
 @app.get("/", summary="Root API Info")
+@app.get("/ocr", summary="OCR Root API Info")
 async def root():
     return {
         "service": "Production Vision OCR & Batch Processing Platform",
@@ -82,7 +96,20 @@ async def root():
         "status": "online",
         "port": settings.port,
         "docs_url": "/docs",
-        "endpoints": {
+        "ocr_endpoints": {
+            "health": "/ocr/health",
+            "chat": "/ocr/api/chat",
+            "chat_upload": "/ocr/api/chat/upload",
+            "ocr": "/ocr/api/ocr",
+            "ocr_sync": "/ocr/api/ocr/sync",
+            "ocr_stream": "/ocr/api/ocr/stream",
+            "ocr_upload": "/ocr/api/ocr/upload",
+            "batch": "/ocr/api/batch",
+            "batch_upload": "/ocr/api/batch/upload",
+            "batches": "/ocr/api/batches",
+            "jobs": "/ocr/api/jobs"
+        },
+        "all_endpoints": {
             "health": "/health",
             "ocr": "/api/ocr",
             "ocr_sync": "/api/ocr/sync",

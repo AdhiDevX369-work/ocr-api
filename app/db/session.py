@@ -47,7 +47,7 @@ async def init_db():
             # Import models to ensure they are registered with Base metadata
             from app.db import models  # noqa: F401
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("✅ Database tables verified and initialized successfully.")
+        logger.info("Database tables verified and initialized successfully.")
     except Exception as e:
-        logger.error(f"❌ Database initialization failed: {e}")
+        logger.error(f"Database initialization failed: {e}")
         raise

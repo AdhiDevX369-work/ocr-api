@@ -84,6 +84,12 @@ async def build_messages_payload(
 
 
 @router.post(
+    "/ocr/api/chat",
+    response_model=ChatResponse,
+    summary="JSON Multi-modal Vision & Text Chat Endpoint",
+    description="Main endpoint for single or multi-turn chat with text and image inputs (Base64 or URL). Supports streaming."
+)
+@router.post(
     "/api/chat",
     response_model=ChatResponse,
     summary="JSON Multi-modal Vision & Text Chat Endpoint",
@@ -156,6 +162,11 @@ async def image_chat(request: ImageChatRequest):
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
+@router.post(
+    "/ocr/api/chat/upload",
+    summary="File Upload Vision & Text Chat Endpoint",
+    description="Endpoint for uploading an image file directly (multipart/form-data) along with text prompt."
+)
 @router.post(
     "/api/chat/upload",
     summary="File Upload Vision & Text Chat Endpoint",

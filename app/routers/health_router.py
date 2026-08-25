@@ -7,6 +7,7 @@ from app.config import settings
 router = APIRouter(tags=["Health"])
 
 @router.get("/health", summary="Service, Database & LLM Engine Health Check")
+@router.get("/ocr/health", summary="Service, Database & LLM Engine Health Check")
 async def health_check():
     llm_health = await llm_client.check_health()
     

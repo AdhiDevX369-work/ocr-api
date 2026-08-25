@@ -50,7 +50,7 @@ class BatchService:
             session.add(batch_record)
             await session.commit()
 
-        logger.info(f"📦 [Batch {batch_id}] Created batch with {total_docs} document(s)...")
+        logger.info(f"[Batch {batch_id}] Created batch with {total_docs} document(s)")
 
         # 2. Create individual child jobs for each document
         for idx, doc_item in enumerate(request.documents):
@@ -227,7 +227,7 @@ class BatchService:
                 else:
                     batch.status = BatchStatus.PARTIAL_FAILED.value
 
-                logger.info(f"🎉 [Batch {batch_id}] Entire batch completed with status '{batch.status}'!")
+                logger.info(f"[Batch {batch_id}] Entire batch completed with status '{batch.status}'")
 
                 if batch.webhook_url:
                     webhook_to_fire = batch.webhook_url

@@ -145,7 +145,7 @@ class LLMClient:
 
         if not available_models:
             fallback = requested_model or self.default_model
-            logger.info(f"🤖 No models returned by [{target_backend}], using fallback model: '{fallback}'")
+            logger.info(f"No models returned by [{target_backend}], using fallback model: '{fallback}'")
             return fallback
 
         vision_keywords = ["ministral-3", "ministral", "pixtral", "qwen2.5vl", "qwen2.5-vl", "qwen3-vl", "qwen3vl", "vl", "vision", "llava", "moondream", "gemma4", "minicpm-v", "llama3.2-vision", "bakllava"]
@@ -161,7 +161,7 @@ class LLMClient:
                         m_id = m.get("id", "")
                         m_aliases = [a.lower() for a in m.get("aliases", [])]
                         if m_id.lower() == req_lower or req_lower in m_aliases or req_lower in m_id.lower():
-                            logger.info(f"🎯 Using requested vision model '{m_id}' on [{target_backend}]")
+                            logger.info(f"Using requested vision model '{m_id}' on [{target_backend}]")
                             return m_id
 
             # Select first available vision-capable model
@@ -169,10 +169,10 @@ class LLMClient:
                 m_id = m.get("id", "").lower()
                 modalities = m.get("input_modalities", [])
                 if "image" in modalities or any(vk in m_id for vk in vision_keywords):
-                    logger.info(f"👁️ Auto-selected vision-capable model '{m['id']}' on [{target_backend}] (requested model '{requested_model}' is text-only)")
+                    logger.info(f"Auto-selected vision-capable model '{m['id']}' on [{target_backend}] (requested model '{requested_model}' is text-only)")
                     return m["id"]
 
-            logger.warning(f"⚠️ An image was provided but no known vision models found on [{target_backend}].")
+            logger.warning(f"An image was provided but no known vision models found on [{target_backend}].")
 
         # 2. If requested model is specified and available in server tags, use it directly
         if requested_model:
@@ -181,19 +181,19 @@ class LLMClient:
                 m_id = m.get("id", "")
                 m_aliases = [a.lower() for a in m.get("aliases", [])]
                 if m_id.lower() == req_lower or req_lower in m_aliases or req_lower in m_id.lower():
-                    logger.info(f"🎯 Using requested model '{m_id}' on [{target_backend}]")
+                    logger.info(f"Using requested model '{m_id}' on [{target_backend}]")
                     return m_id
 
         # 3. Prioritize 'loaded' model
         for m in available_models:
             if m.get("status") == "loaded":
-                logger.info(f"⚡ Picked loaded model '{m['id']}' on [{target_backend}]")
+                logger.info(f"Picked active loaded model '{m['id']}' on [{target_backend}]")
                 return m["id"]
 
         # 4. Fallback to first model in list
         if available_models:
             first_model = available_models[0].get("id", self.default_model)
-            logger.info(f"ℹ️ Selected default available model '{first_model}' on [{target_backend}]")
+            logger.info(f"Selected default available model '{first_model}' on [{target_backend}]")
             return first_model
         return self.default_model
 
@@ -254,7 +254,7 @@ class LLMClient:
         """Asynchronously warm up / preload the vision model into VRAM."""
         target_backend = backend or self.default_backend
         selected_model = await self.pick_model(backend=target_backend, requested_model=model or self.default_model, has_images=True)
-        logger.info(f"🔥 Pre-loading / Warming up vision model '{selected_model}' on [{target_backend}]...")
+        logger.info(f"Pre-loading model '{selected_model}' on [{target_backend}]")
         try:
             if target_backend == "ollama":
                 client = await self.get_client()
@@ -279,11 +279,11 @@ class LLMClient:
                     timeout=60.0
                 )
                 if resp.status_code == 200:
-                    logger.info(f"⚡ Vision model '{selected_model}' successfully pre-loaded into GPU VRAM!")
+                    logger.info(f"Model '{selected_model}' successfully pre-loaded into GPU VRAM.")
                 else:
-                    logger.warning(f"⚠️ Model warmup returned HTTP {resp.status_code}: {resp.text}")
+                    logger.warning(f"Model warmup returned HTTP {resp.status_code}: {resp.text}")
         except Exception as e:
-            logger.warning(f"⚠️ Model warmup encountered an issue: {e}")
+            logger.warning(f"Model warmup encountered an issue: {e}")
 
     async def check_health(self) -> Dict[str, Any]:
         """Performs connection & model discovery checks concurrently against llama.cpp & Ollama backends."""
@@ -507,7 +507,7 @@ class LLMClient:
                                 if thinking:
                                     if not in_thinking:
                                         in_thinking = True
-                                        yield "> 🧠 *Thinking...*\n> "
+                                        yield "> *Thinking...*\n> "
                                     yield thinking.replace("\n", "\n> ")
                                 if content:
                                     if in_thinking:

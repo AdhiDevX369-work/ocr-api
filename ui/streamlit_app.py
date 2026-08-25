@@ -194,6 +194,12 @@ with st.sidebar:
 # Health Check
 def check_health(base_url):
     try:
+        r = requests.get(f"{base_url}/ocr/health", timeout=3)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    try:
         r = requests.get(f"{base_url}/health", timeout=3)
         if r.status_code == 200:
             return r.json()
@@ -206,13 +212,13 @@ health_status = check_health(api_base_url)
 # Header Section
 col_head, col_stat = st.columns([3, 1])
 with col_head:
-    st.markdown("<div class='main-title'>🩺 Medical Report OCR & Vision AI Platform</div>", unsafe_allow_html=True)
+    st.markdown("<div class='main-title'>Medical Report OCR & Vision AI Platform</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-title'>Enterprise-Grade Single & Batch Medical Document Processing (FastAPI, Redis, PostgreSQL, Ollama & llama-server)</div>", unsafe_allow_html=True)
 
 with col_stat:
     if health_status and health_status.get("status") in ("healthy", "degraded"):
         db_stat = health_status.get("database", {}).get("status", "ok")
-        st.markdown(f"<div class='badge-healthy'>🟢 API Online (DB: {db_stat})</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='badge-healthy'>API Online (DB: {db_stat})</div>", unsafe_allow_html=True)
     else:
         st.markdown("<div class='badge-offline'>🔴 API Offline</div>", unsafe_allow_html=True)
 
@@ -353,7 +359,7 @@ with tab_single:
                     if stream_response:
                         with httpx.stream(
                             "POST",
-                            f"{api_base_url}/api/v1/ocr/stream",
+                            f"{api_base_url}/ocr/api/ocr/stream",
                             json=payload,
                             timeout=httpx.Timeout(300.0, connect=30.0, read=180.0)
                         ) as resp:
@@ -380,7 +386,7 @@ with tab_single:
                                             continue
                                 message_placeholder.markdown(full_response)
                     else:
-                        resp = requests.post(f"{api_base_url}/api/v1/ocr/sync", json=payload, timeout=120)
+                        resp = requests.post(f"{api_base_url}/ocr/api/ocr/sync", json=payload, timeout=120)
                         if resp.status_code == 200:
                             data_json = resp.json()
                             full_response = json.dumps(data_json.get("data"), indent=2) if isinstance(data_json.get("data"), dict) else str(data_json.get("data"))
@@ -394,7 +400,7 @@ with tab_single:
             if full_response:
                 st.session_state.messages.append({"role": "assistant", "content": full_response})
                 st.download_button(
-                    "📥 Download Output (JSON/Text)",
+                    "Download Output (JSON/Text)",
                     data=full_response,
                     file_name="ocr_extracted_result.json",
                     mime="application/json"
@@ -404,7 +410,7 @@ with tab_single:
 # TAB 2: MULTI-DOCUMENT BATCH PROCESSING
 # ---------------------------------------------------------
 with tab_batch:
-    st.markdown("### 📦 Enterprise Multi-Document Batch Processing Studio")
+    st.markdown("### Enterprise Multi-Document Batch Processing Studio")
     st.markdown("Submit up to **100 PDF documents or scans** simultaneously. The worker pool processes them asynchronously in background with database persistence.")
 
     col_b_up, col_b_params = st.columns([1, 1])
@@ -425,7 +431,7 @@ with tab_batch:
             value="Perform an exact line-by-line verification check and extract all values into structured JSON.",
             height=110
         )
-        submit_batch_btn = st.button("🚀 Submit Multi-Document Batch Job", use_container_width=True)
+        submit_batch_btn = st.button("Submit Multi-Document Batch Job", use_container_width=True)
 
     if submit_batch_btn:
         if not batch_files:
@@ -444,11 +450,11 @@ with tab_batch:
                     "webhook_url": batch_webhook.strip() if batch_webhook.strip() else ""
                 }
                 try:
-                    res = requests.post(f"{api_base_url}/api/v1/batches/upload", files=files_payload, data=data_payload, timeout=30)
+                    res = requests.post(f"{api_base_url}/ocr/api/batch/upload", files=files_payload, data=data_payload, timeout=30)
                     if res.status_code == 202:
                         batch_info = res.json()
                         st.session_state.active_batch_id = batch_info["batch_id"]
-                        st.success(f"🎉 Batch Created! ID: `{batch_info['batch_id']}` with {batch_info['total_files']} files.")
+                        st.success(f"Batch Created! ID: `{batch_info['batch_id']}` with {batch_info['total_files']} files.")
                     else:
                         st.error(f"Failed to submit batch ({res.status_code}): {res.text}")
                 except Exception as b_err:
@@ -458,10 +464,10 @@ with tab_batch:
     if st.session_state.active_batch_id:
         st.divider()
         b_id = st.session_state.active_batch_id
-        st.markdown(f"#### 🔄 Live Batch Progress: `{b_id}`")
+        st.markdown(f"#### Live Batch Progress: `{b_id}`")
 
         try:
-            b_res = requests.get(f"{api_base_url}/api/v1/batches/{b_id}/jobs", timeout=5)
+            b_res = requests.get(f"{api_base_url}/ocr/api/batch/{b_id}/jobs", timeout=5)
             if b_res.status_code == 200:
                 b_data = b_res.json()
                 total = b_data.get("total_files", 0)
@@ -486,17 +492,17 @@ with tab_batch:
                 # Action buttons
                 col_dl1, col_dl2, col_ref = st.columns(3)
                 with col_dl1:
-                    dl_json_url = f"{api_base_url}/api/v1/batches/{b_id}/download?format=json"
-                    st.markdown(f"📥 [**Download Merged JSON**]({dl_json_url})")
+                    dl_json_url = f"{api_base_url}/ocr/api/batch/{b_id}/download?format=json"
+                    st.markdown(f"[**Download Merged JSON**]({dl_json_url})")
                 with col_dl2:
-                    dl_zip_url = f"{api_base_url}/api/v1/batches/{b_id}/download?format=zip"
-                    st.markdown(f"📦 [**Download ZIP Archive**]({dl_zip_url})")
+                    dl_zip_url = f"{api_base_url}/ocr/api/batch/{b_id}/download?format=zip"
+                    st.markdown(f"[**Download ZIP Archive**]({dl_zip_url})")
                 with col_ref:
-                    if st.button("🔄 Refresh Status", key="btn_refresh_batch"):
+                    if st.button("Refresh Status", key="btn_refresh_batch"):
                         st.rerun()
 
                 # Table of individual jobs
-                st.markdown("##### 📄 Documents in Batch")
+                st.markdown("##### Documents in Batch")
                 jobs_list = b_data.get("jobs", [])
                 table_data = []
                 for j in jobs_list:
@@ -516,9 +522,9 @@ with tab_batch:
 # TAB 3: BATCH & JOB HISTORY INSPECTOR
 # ---------------------------------------------------------
 with tab_history:
-    st.markdown("### 📊 Historical Batches & Jobs Explorer")
+    st.markdown("### Historical Batches & Jobs Explorer")
     try:
-        b_list_res = requests.get(f"{api_base_url}/api/v1/batches?page=1&page_size=20", timeout=5)
+        b_list_res = requests.get(f"{api_base_url}/ocr/api/batches?page=1&page_size=20", timeout=5)
         if b_list_res.status_code == 200:
             batches_payload = b_list_res.json()
             batches = batches_payload.get("batches", [])
@@ -526,11 +532,11 @@ with tab_history:
                 st.info("No batches found in database. Create a batch in the Batch Processing tab.")
             else:
                 for b in batches:
-                    with st.expander(f"📦 {b['name']} ({b['batch_id']}) — Status: {b['status'].upper()} ({b['processed_files']}/{b['total_files']} files)"):
+                    with st.expander(f"{b['name']} ({b['batch_id']}) — Status: {b['status'].upper()} ({b['processed_files']}/{b['total_files']} files)"):
                         st.write(f"**Created At:** `{b['created_at']}` | **Completed At:** `{b['completed_at'] or 'In Progress'}`")
                         st.write(f"**Progress:** `{b['progress_percentage']}%` | **Failed:** `{b['failed_files']}`")
-                        st.markdown(f"[📥 Download Merged JSON]({api_base_url}/api/v1/batches/{b['batch_id']}/download?format=json) | [📦 Download ZIP]({api_base_url}/api/v1/batches/{b['batch_id']}/download?format=zip)")
-                        if st.button(f"🔍 Load into Live Progress View", key=f"btn_load_{b['batch_id']}"):
+                        st.markdown(f"[Download Merged JSON]({api_base_url}/ocr/api/batch/{b['batch_id']}/download?format=json) | [Download ZIP]({api_base_url}/ocr/api/batch/{b['batch_id']}/download?format=zip)")
+                        if st.button(f"Load into Live Progress View", key=f"btn_load_{b['batch_id']}"):
                             st.session_state.active_batch_id = b["batch_id"]
                             st.rerun()
     except Exception as hist_err:
