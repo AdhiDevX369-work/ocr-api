@@ -32,8 +32,8 @@ jobs:
               git fetch origin
               BRANCH=\$(git rev-parse --abbrev-ref HEAD)
               git reset --hard origin/\$BRANCH
-              echo '📦 Updating Python dependencies...'
-              ./venv/bin/pip install -r requirements.txt
+              echo '📦 Updating Python dependencies in laiagent conda env...'
+              /home/ml-dev-user/miniconda3/envs/laiagent/bin/pip install -r requirements.txt
             "
             echo "🔄 Restarting OCR API Service..."
             sudo systemctl restart ocr-api
