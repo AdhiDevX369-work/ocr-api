@@ -67,13 +67,19 @@ class NativeOCRService:
 
         t1 = time.monotonic()
         duration = round(t1 - t0, 3)
-        logger.info(f"Native OCR inference finished in {duration}s ({len(extracted_lines)} lines extracted)")
+        logger.info(f"⚡ [Native OCR] Line extraction finished in {duration}s. Extracted {len(extracted_lines)} lines.")
+        logger.debug(f"📄 [Native OCR] Raw extracted lines:\n" + "\n".join(f"   [{i+1}] {l}" for i, l in enumerate(extracted_lines)))
 
         # Parse with deterministic clinical rule parser
         parsed_data = clinical_rule_parser.parse(extracted_lines)
+        logger.info(f"🧪 [Clinical Rule Parser] Parsed Title: '{parsed_data.get('report_title')}', Patient: {parsed_data.get('patient_info')}, Results count: {len(parsed_data.get('results', []))}")
 
         # Validate with strict schema
         validated_data, err = SchemaValidator.parse_and_validate(parsed_data, MedicalReportExtraction)
+        if err:
+            logger.warning(f"⚠️ [Schema Validation] Soft validation warning: {err}")
+        else:
+            logger.info("✅ [Schema Validation] MedicalReportExtraction validation successful.")
 
         return validated_data if validated_data else parsed_data, extracted_lines, duration
 

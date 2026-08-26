@@ -371,30 +371,33 @@ class SchemaValidator:
     @classmethod
     def parse_and_validate(
         cls,
-        raw_text: str,
+        raw_text: Any,
         target_schema: Optional[Type[BaseModel]] = MedicalReportExtraction
     ) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
-        Parses raw LLM text, repairs JSON, or extracts table/markdown layouts,
+        Parses raw text or dict, repairs JSON, or extracts table/markdown layouts,
         and validates against target Pydantic schema.
         Returns: (parsed_data_dict_or_none, error_message_or_none)
         """
-        extracted = cls.extract_json_string(raw_text)
-        parsed = None
+        if isinstance(raw_text, dict):
+            parsed = raw_text
+        else:
+            extracted = cls.extract_json_string(str(raw_text or ""))
+            parsed = None
 
-        if extracted:
-            try:
-                parsed = json.loads(extracted)
-            except json.JSONDecodeError:
-                repaired = cls.repair_json_string(extracted)
+            if extracted:
                 try:
-                    parsed = json.loads(repaired)
-                except json.JSONDecodeError as err:
-                    logger.debug(f"Direct JSON decode failed: {err}")
+                    parsed = json.loads(extracted)
+                except json.JSONDecodeError:
+                    repaired = cls.repair_json_string(extracted)
+                    try:
+                        parsed = json.loads(repaired)
+                    except json.JSONDecodeError as err:
+                        logger.debug(f"Direct JSON decode failed: {err}")
 
-        # If direct JSON was not found or failed, use universal Table/Markdown layout parser
-        if parsed is None or not isinstance(parsed, (dict, list)):
-            parsed = cls.parse_table_or_markdown_text(raw_text)
+            # If direct JSON was not found or failed, use universal Table/Markdown layout parser
+            if parsed is None or not isinstance(parsed, (dict, list)):
+                parsed = cls.parse_table_or_markdown_text(str(raw_text or ""))
 
         if target_schema and isinstance(parsed, dict):
             try:
