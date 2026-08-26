@@ -148,16 +148,19 @@ async def process_ocr_stream(request: OCRRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
-DEFAULT_SYSTEM_PROMPT = "You are an expert Medical Report OCR AI. Extract patient metadata and all lab test parameters into strict, valid JSON."
+DEFAULT_SYSTEM_PROMPT = (
+    "You are an expert Clinical Laboratory Report Vision OCR AI. "
+    "Your objective is to accurately transcribe patient demographics and lab test observations from any laboratory layout into strict, structured JSON."
+)
 DEFAULT_USER_PROMPT = (
-    "Extract all test parameters and patient info into JSON matching this exact structure:\n"
+    "Analyze this laboratory diagnostic report and extract all patient demographics and test observations into a JSON object matching this exact structure:\n"
     "{\n"
-    '  "report_title": "Full Blood Count",\n'
+    '  "report_title": "Full Blood Count / Urine UPCR / Biochemistry",\n'
     '  "patient_info": {\n'
-    '    "patient_name": "MISS TOPH",\n'
-    '    "pid_no": "18353",\n'
-    '    "age": "20 Years",\n'
-    '    "sex": "Female",\n'
+    '    "patient_name": "...",\n'
+    '    "pid_no": "...",\n'
+    '    "age": "...",\n'
+    '    "sex": "...",\n'
     '    "tel_no": "",\n'
     '    "reference_dr": "",\n'
     '    "registered_on": "",\n'
@@ -166,14 +169,18 @@ DEFAULT_USER_PROMPT = (
     "  },\n"
     '  "results": [\n'
     "    {\n"
-    '      "type": "hba1c",\n'
-    '      "name": "HbA1C",\n'
-    '      "value": "85",\n'
-    '      "unit": "%"\n'
+    '      "type": "fasting_blood_sugar",\n'
+    '      "name": "Fasting Blood Sugar",\n'
+    '      "value": "104",\n'
+    '      "unit": "mg/dl"\n'
     "    }\n"
     "  ]\n"
     "}\n"
-    "Ensure every test parameter is listed in the results array with type, name, value, and unit."
+    "CRITICAL RULES:\n"
+    "1. In the 'results' array, include ONLY actual patient test observations. Do NOT extract reference range tables, interpretation remark grids (e.g. '< 0.2 Normal'), or age guideline charts as results.\n"
+    "2. If the value and unit are in the same column (e.g. '104 mg/dl'), separate them cleanly into value ('104') and unit ('mg/dl').\n"
+    "3. Set 'type' as a lowercase snake_case identifier (e.g. 'fasting_blood_sugar', 'total_cholesterol', 'protein_total', 'creatinine', 'protein_creatinine_ratio').\n"
+    "4. Return strictly valid JSON."
 )
 
 @router.post(

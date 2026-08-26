@@ -69,15 +69,92 @@ class SchemaValidator:
         return cleaned
 
     @staticmethod
+    def split_value_and_unit(val_str: str, unit_str: str) -> Tuple[str, str]:
+        """
+        Cleans and separates combined value and unit strings (e.g. '104 mg/dl' -> '104', 'mg/dl').
+        Strips trailing status flags like 'Low', 'High', '*', '(L)', '(H)'.
+        """
+        v = (val_str or "").strip()
+        u = (unit_str or "").strip()
+
+        if not v:
+            return "", u
+
+        # 1. Strip trailing status flags from value (e.g. '11.00 Low' -> '11.00', '1.00 High' -> '1.00')
+        v = re.sub(r"\s+(?:Low|High|Normal|Critical|Abnormal|\(L\)|\(H\)|\*)\b", "", v, flags=re.IGNORECASE).strip()
+
+        # 2. Known common medical units to match at the end of value string
+        known_units_pattern = r"(?:mg\/dL|mg\/dl|g\/dL|g\/dl|mEq\/L|meq\/l|mmol\/L|mmol\/l|µmol\/L|umol\/L|cells\/mm³|cells\/mm3|mill\/mm³|mill\/mm3|\/cumm|\/uL|\/µl|%|fL|fl|pg|g\/L|U\/L|IU\/L|IU\/mL|ng\/mL|ng\/dl|µg\/dL|ug\/dl|mL\/min\/1\.73m2|mL\/min|mm\/hr|Ratio)\b"
+
+        # Check if unit is already present in value string
+        unit_match = re.search(rf"\s*({known_units_pattern})\s*$", v, re.IGNORECASE)
+        if unit_match:
+            detected_unit = unit_match.group(1)
+            v = v[:unit_match.start()].strip()
+            if not u:
+                u = detected_unit
+
+        # Check for comparator operator attached to numbers (e.g., '< 14.00' or '<14.00' or '>= 60')
+        comp_match = re.match(r"^([<>]=?|=)\s*([0-9]+(?:\.[0-9]+)?)\s*(.*)$", v)
+        if comp_match:
+            operator, num_part, remainder = comp_match.groups()
+            v = f"{operator} {num_part}".strip()
+            if remainder.strip() and not u:
+                u = remainder.strip()
+
+        return v, u
+
+    @staticmethod
+    def is_guideline_or_noise_item(name: str, val: str) -> bool:
+        """
+        Detects if an extracted row is actually an interpretation remark, age reference table row,
+        sample description, or guideline chart rather than a patient test observation.
+        """
+        n = (name or "").strip().lower()
+        v = (val or "").strip().lower()
+
+        # Ignore empty garbage
+        if not n and not v:
+            return True
+
+        # Header / Section / Non-test rows
+        ignored_name_keywords = [
+            "interpretation", "remark", "protein creatinine ratio remark",
+            "low grade proteinuria", "moderate proteinuria", "nephrosis",
+            "primary sample type", "sample type", "test method", "method", "methodology",
+            "average estimated gfr by age", "estimated gfr by age", "age related normal",
+            "upcr high levels cause", "upcr low levels cause", "comments", "comment",
+            "thanks for reference", "end of report", "notes", "note", "instrument",
+            "department", "biochemistry", "hematology", "clinical pathology", "parameter"
+        ]
+        for kw in ignored_name_keywords:
+            if kw in n:
+                return True
+
+        # Non-test values (e.g. value is a medical diagnosis description rather than a measurement)
+        if v in ["remark", "low grade proteinuria", "moderate proteinuria", "nephrosis"]:
+            return True
+
+        # Age group reference rows (e.g. name is "18-29", "30-39", "40-49", "50-59", "60-69", "70+")
+        if re.match(r"^(?:18\s*-\s*29|20\s*-\s*29|30\s*-\s*39|40\s*-\s*49|50\s*-\s*59|60\s*-\s*69|70\s*\+|80\s*\+)(?:\s*years)?$", n):
+            return True
+
+        # Pure ranges as name (e.g. "< 0.2", "0.2 - 1.0", "1.0 - 5.0", "> 5.0")
+        if re.match(r"^[<>]?\s*[0-9]+(?:\.[0-9]+)?(?:\s*-\s*[0-9]+(?:\.[0-9]+)?)?$", n):
+            return True
+
+        return False
+
+    @staticmethod
     def slugify_test_name(name: str) -> str:
-        """Converts test name to standardized lowercase slug identifier."""
+        """Converts any test name to standardized lowercase canonical slug identifier."""
         if not name:
             return "unknown_test"
         clean = name.strip()
-        
-        # Exact alias mappings
         lower = clean.lower()
+
         alias_map = {
+            # Glucose & Glycated
             "hba1c": "hba1c",
             "glycated hemoglobin": "hba1c",
             "glycosylated hemoglobin": "hba1c",
@@ -85,66 +162,175 @@ class SchemaValidator:
             "fasting blood sugar": "fbs",
             "fasting blood glucose": "fbs",
             "fasting plasma glucose": "fbs",
+            "glucose fasting": "fbs",
+            "glucose - fasting": "fbs",
+            "glucose, fasting": "fbs",
             "ppbs": "ppbs",
             "post prandial blood sugar": "ppbs",
+            "post prandial blood glucose": "ppbs",
+            "glucose post prandial": "ppbs",
             "rbs": "rbs",
             "random blood sugar": "rbs",
+            "random blood glucose": "rbs",
+            "glucose random": "rbs",
+
+            # Urine & Renal Proteins
+            "protein total": "protein_total",
+            "total protein": "protein_total",
+            "urine protein total": "urine_protein_total",
+            "urine protein": "urine_protein",
+            "urine creatinine": "urine_creatinine",
+            "creatinin": "creatinine",
+            "creatinine": "creatinine",
+            "serum creatinine": "serum_creatinine",
+            "protein creatinine ratio": "protein_creatinine_ratio",
+            "protein - creatinine ratio": "protein_creatinine_ratio",
+            "protein / creatinine ratio": "protein_creatinine_ratio",
+            "upcr": "protein_creatinine_ratio",
+            "microalbumin": "microalbumin",
+            "urine microalbumin": "urine_microalbumin",
+            "albumin creatinine ratio": "albumin_creatinine_ratio",
+            "acr": "albumin_creatinine_ratio",
+
+            # Renal Function
+            "blood urea": "blood_urea",
+            "urea": "blood_urea",
+            "bun": "blood_urea_nitrogen",
+            "blood urea nitrogen": "blood_urea_nitrogen",
+            "egfr": "egfr",
+            "estimated gfr": "egfr",
+            "estimated glomerular filtration rate": "egfr",
+            "serum uric acid": "uric_acid",
+            "uric acid": "uric_acid",
+
+            # Lipid Profile
+            "total cholesterol": "total_cholesterol",
+            "cholesterol - total": "total_cholesterol",
+            "cholesterol total": "total_cholesterol",
+            "cholesterol": "total_cholesterol",
+            "serum cholesterol": "total_cholesterol",
+            "triglycerides": "triglycerides",
+            "serum triglycerides": "triglycerides",
+            "hdl": "hdl_cholesterol",
+            "hdl cholesterol": "hdl_cholesterol",
+            "hdl - cholesterol": "hdl_cholesterol",
+            "direct hdl": "hdl_cholesterol",
+            "ldl": "ldl_cholesterol",
+            "ldl cholesterol": "ldl_cholesterol",
+            "ldl - cholesterol": "ldl_cholesterol",
+            "calculated ldl": "ldl_cholesterol",
+            "vldl": "vldl_cholesterol",
+            "vldl cholesterol": "vldl_cholesterol",
+            "vldl - cholesterol": "vldl_cholesterol",
+            "chol/hdl ratio": "chol_hdl_ratio",
+            "cholesterol / hdl ratio": "chol_hdl_ratio",
+            "tc/hdl ratio": "chol_hdl_ratio",
+            "ldl/hdl ratio": "ldl_hdl_ratio",
+            "non-hdl cholesterol": "non_hdl_cholesterol",
+
+            # Hematology & CBC
             "wbc count": "wbc_count",
             "total wbc": "wbc_count",
+            "total leucocyte count": "wbc_count",
+            "total leukocyte count": "wbc_count",
             "w.b.c": "wbc_count",
             "white blood cells": "wbc_count",
             "wbc": "wbc_count",
             "rbc count": "rbc_count",
             "total rbc": "rbc_count",
+            "total erythrocyte count": "rbc_count",
             "r.b.c": "rbc_count",
             "red blood cells": "rbc_count",
             "rbc": "rbc_count",
             "hemoglobin": "hemoglobin",
             "haemoglobin": "hemoglobin",
             "hb": "hemoglobin",
+            "hb (hemoglobin)": "hemoglobin",
             "platelet count": "platelet_count",
             "platelets": "platelet_count",
+            "total platelets": "platelet_count",
             "pcv": "pcv",
+            "pcv (packed cell volume)": "pcv",
             "packed cell volume": "pcv",
+            "hematocrit": "hematocrit",
             "mcv": "mcv",
+            "mcv (mean corpuscular volume)": "mcv",
+            "mean corpuscular volume": "mcv",
             "mch": "mch",
+            "mch (mean corpuscular hemoglobin)": "mch",
+            "mean corpuscular hemoglobin": "mch",
             "mchc": "mchc",
+            "mchc (mean corpuscular hemoglobin concentration)": "mchc",
+            "mean corpuscular hemoglobin concentration": "mchc",
+            "rdw": "rdw",
+            "rdw-cv": "rdw_cv",
+            "rdw-sd": "rdw_sd",
             "neutrophils": "neutrophils",
+            "segmented neutrophils": "neutrophils",
             "lymphocytes": "lymphocytes",
             "monocytes": "monocytes",
             "eosinophils": "eosinophils",
             "basophils": "basophils",
-            "serum creatinine": "serum_creatinine",
-            "creatinine": "serum_creatinine",
-            "blood urea": "blood_urea",
-            "urea": "blood_urea",
-            "egfr": "egfr",
-            "estimated gfr": "egfr",
-            "total cholesterol": "total_cholesterol",
-            "cholesterol": "total_cholesterol",
-            "hdl": "hdl_cholesterol",
-            "hdl cholesterol": "hdl_cholesterol",
-            "ldl": "ldl_cholesterol",
-            "ldl cholesterol": "ldl_cholesterol",
-            "vldl": "vldl_cholesterol",
-            "vldl cholesterol": "vldl_cholesterol",
-            "triglycerides": "triglycerides",
+            "esr": "esr",
+            "erythrocyte sedimentation rate": "esr",
+
+            # Liver Function (LFT)
             "sgpt": "sgpt_alt",
             "sgpt / alt": "sgpt_alt",
             "alt": "sgpt_alt",
+            "alanine aminotransferase": "sgpt_alt",
             "sgot": "sgot_ast",
             "sgot / ast": "sgot_ast",
             "ast": "sgot_ast",
-            "tsh": "tsh",
+            "aspartate aminotransferase": "sgot_ast",
+            "alkaline phosphatase": "alkaline_phosphatase",
+            "alp": "alkaline_phosphatase",
             "bilirubin total": "bilirubin_total",
             "total bilirubin": "bilirubin_total",
-            "serum uric acid": "uric_acid",
-            "uric acid": "uric_acid"
+            "bilirubin direct": "bilirubin_direct",
+            "direct bilirubin": "bilirubin_direct",
+            "bilirubin indirect": "bilirubin_indirect",
+            "gamma gt": "ggt",
+            "ggt": "ggt",
+            "serum albumin": "serum_albumin",
+            "albumin": "albumin",
+            "serum globulin": "serum_globulin",
+            "globulin": "globulin",
+            "a:g ratio": "ag_ratio",
+            "a/g ratio": "ag_ratio",
+
+            # Thyroid & Hormones
+            "tsh": "tsh",
+            "thyroid stimulating hormone": "tsh",
+            "t3": "total_t3",
+            "t4": "total_t4",
+            "free t3": "free_t3",
+            "ft3": "free_t3",
+            "free t4": "free_t4",
+            "ft4": "free_t4",
+
+            # Electrolytes & Minerals
+            "serum sodium": "serum_sodium",
+            "sodium": "serum_sodium",
+            "na+": "serum_sodium",
+            "serum potassium": "serum_potassium",
+            "potassium": "serum_potassium",
+            "k+": "serum_potassium",
+            "serum chloride": "serum_chloride",
+            "chloride": "serum_chloride",
+            "cl-": "serum_chloride",
+            "calcium": "calcium",
+            "serum calcium": "calcium",
+            "serum phosphorus": "phosphorus",
+            "magnesium": "magnesium",
+            "crp": "crp",
+            "c-reactive protein": "crp"
         }
+
         if lower in alias_map:
             return alias_map[lower]
 
-        # General slugification
+        # Clean punctuation and slugify
         s = re.sub(r"[^\w\s-]", "", lower)
         s = re.sub(r"[\s_-]+", "_", s).strip("_")
         return s or "test_parameter"
@@ -157,6 +343,7 @@ class SchemaValidator:
         def process_raw_item(item: Any):
             if not isinstance(item, dict):
                 return
+
             # 1. Extract test name
             name = (
                 item.get("name")
@@ -176,18 +363,28 @@ class SchemaValidator:
                 if item.get("observed_value") is not None
                 else item.get("result")
                 if item.get("result") is not None
+                else item.get("patient_value")
+                if item.get("patient_value") is not None
                 else ""
             )
-            value_str = str(val).strip() if val is not None else ""
+            val_str = str(val).strip() if val is not None else ""
 
             # 3. Extract unit
             unit = item.get("unit") or item.get("units") or item.get("measurement_unit") or ""
             unit_str = str(unit).strip() if unit is not None else ""
 
-            # 4. Extract or generate slug type (prioritizing specific parameter name over broad category names)
+            # 4. Filter out guideline / interpretation chart noise
+            if cls.is_guideline_or_noise_item(name_str, val_str):
+                return
+
+            # 5. Clean & Split combined Value and Unit (e.g. '104 mg/dl' -> value: '104', unit: 'mg/dl')
+            clean_val, clean_unit = cls.split_value_and_unit(val_str, unit_str)
+
+            # 6. Extract or generate canonical slug type
             generic_categories = {
                 "leucocytes", "erythrocytes", "platelets", "investigations", "general",
-                "parameters", "tests", "test", "results", "blood", "urine", "biochemistry"
+                "parameters", "tests", "test", "results", "blood", "urine", "biochemistry",
+                "lipid_profile", "renal_profile", "liver_function"
             }
             slug_type = item.get("type") or ""
             if not slug_type or not isinstance(slug_type, str) or slug_type.strip().lower() in generic_categories:
@@ -195,18 +392,17 @@ class SchemaValidator:
             else:
                 slug_type = cls.slugify_test_name(slug_type)
 
-            if name_str or value_str:
+            if name_str or clean_val:
                 standardized_items.append({
                     "type": slug_type,
                     "name": name_str or slug_type.replace("_", " ").title(),
-                    "value": value_str,
-                    "unit": unit_str
+                    "value": clean_val,
+                    "unit": clean_unit
                 })
 
         if isinstance(raw_list, list):
             for elem in raw_list:
                 if isinstance(elem, dict):
-                    # Check if elem contains nested arrays (like {"leucocytes": [...]})
                     has_nested = False
                     for k, v in elem.items():
                         if isinstance(v, list) and v and isinstance(v[0], dict):
@@ -250,10 +446,28 @@ class SchemaValidator:
         if patient_info:
             if "name" in patient_info and "patient_name" not in patient_info:
                 patient_info["patient_name"] = patient_info["name"]
-            if "id" in patient_info and "pid_no" not in patient_info:
-                patient_info["pid_no"] = patient_info["id"]
-            if "ref_dr" in patient_info and "reference_dr" not in patient_info:
-                patient_info["reference_dr"] = patient_info["ref_dr"]
+            if "patient" in patient_info and "patient_name" not in patient_info:
+                patient_info["patient_name"] = patient_info["patient"]
+
+            # PID / Test No / Sample ID mapping
+            for pid_key in ["pid", "id", "test_no", "ref_no", "reg_no", "registration_no", "patient_id", "sample_id", "barcode"]:
+                if pid_key in patient_info and "pid_no" not in patient_info and patient_info[pid_key]:
+                    patient_info["pid_no"] = str(patient_info[pid_key])
+                    break
+
+            # Ref Dr mapping
+            for dr_key in ["ref_by", "ref_dr", "referring_doctor", "doctor", "referred_by", "consultant"]:
+                if dr_key in patient_info and "reference_dr" not in patient_info and patient_info[dr_key]:
+                    patient_info["reference_dr"] = str(patient_info[dr_key])
+                    break
+
+            # Gender / Sex mapping
+            for sex_key in ["gender", "sex"]:
+                if sex_key in patient_info and patient_info[sex_key]:
+                    patient_info["sex"] = str(patient_info[sex_key])
+                    break
+
+            # Age normalization
             if "age" in patient_info and patient_info["age"] is not None:
                 patient_info["age"] = str(patient_info["age"])
             if "pid_no" in patient_info and patient_info["pid_no"] is not None:
