@@ -26,8 +26,12 @@ router = APIRouter(tags=["Direct Vision OCR (Single Processing)"])
 PROMPT_PRESETS: Dict[OCRTaskType, Dict[str, str]] = {
     OCRTaskType.GENERAL_OCR: {
         "system": (
-            "You are a cutting-edge Vision-Language OCR model. "
-            "Your objective is to accurately transcribe all content from document pages into structured, high-fidelity Markdown."
+            "You are a high-speed Vision-Language OCR model. "
+            "Your objective is to accurately transcribe all content from document pages into structured, high-fidelity Markdown.\n"
+            "REASONING & SPEED CONSTRAINTS:\n"
+            "- Limit any internal visual reasoning to a single brief glance (max 5-10 seconds).\n"
+            "- Strictly avoid repetitive thinking loops, endless deliberation, or conversational preambles.\n"
+            "- Output clean Markdown directly with 100% visual fidelity."
         ),
         "user": (
             "Transcribe all text from this document naturally in exact reading order preserving structural hierarchy.\n"
@@ -37,13 +41,19 @@ PROMPT_PRESETS: Dict[OCRTaskType, Dict[str, str]] = {
             "- For charts or diagrams, provide descriptions inside <img>...</img> tags.\n"
             "- Preserve checkboxes using ☐ (unchecked) and ☑ (checked).\n"
             "- Wrap watermarks in <watermark>...</watermark> and page numbers in <page_number>...</page_number>.\n"
-            "- Maintain original headings, bullet lists, and paragraphs faithfully without summarizing."
+            "- Maintain original headings, bullet lists, and paragraphs faithfully without summarizing.\n"
+            "ANTI-HALLUCINATION & THINKING RULES:\n"
+            "- Extract ONLY text that is visually visible. Never guess or hallucinate text.\n"
+            "- Do not get stuck in multi-step thinking loops; output final Markdown directly."
         )
     },
     OCRTaskType.MEDICAL_EXTRACTION: {
         "system": (
-            "You are an expert Clinical Laboratory Report Vision OCR AI. "
-            "Your objective is to accurately transcribe patient demographics and lab test observations from any laboratory layout into strict, structured JSON."
+            "You are an expert Clinical Diagnostic Report Vision OCR AI. "
+            "Your objective is to accurately transcribe patient demographics and lab test observations from any laboratory layout into strict, structured JSON.\n"
+            "REASONING & LATENCY RULES:\n"
+            "- Keep visual inspection concise (max 5-10 seconds). Do NOT enter repetitive thinking loops or overanalyze background noise.\n"
+            "- Output valid, raw JSON directly without reasoning preambles or explanations."
         ),
         "user": (
             "Analyze this laboratory diagnostic report and extract all patient demographics and test observations into a JSON object matching this exact structure:\n"
@@ -73,20 +83,21 @@ PROMPT_PRESETS: Dict[OCRTaskType, Dict[str, str]] = {
             "1. In the 'results' array, include ONLY actual patient test observations. Do NOT extract reference range tables, interpretation remark grids (e.g. '< 0.2 Normal'), or age guideline charts as results.\n"
             "2. If the value and unit are in the same column (e.g. '104 mg/dl'), separate them cleanly into value ('104') and unit ('mg/dl').\n"
             "3. Set 'type' as a lowercase snake_case identifier (e.g. 'fasting_blood_sugar', 'total_cholesterol', 'protein_total', 'creatinine', 'protein_creatinine_ratio').\n"
-            "4. Return strictly valid JSON."
+            "4. ANTI-HALLUCINATION: Extract only visually confirmed data from the image. Never invent, calculate, or extrapolate unprinted values.\n"
+            "5. NO THINKING OVERFLOW: Limit inspection to max 10s; do not loop. Output strictly valid raw JSON."
         )
     },
     OCRTaskType.TABLE_EXTRACTION: {
-        "system": "You are a specialized Document Table & Grid Extraction AI.",
-        "user": "Extract all data tables and structured grids from this document into clean HTML <table> structures with exact column headers and row alignment."
+        "system": "You are a specialized Document Table & Grid Extraction AI. Extract tables cleanly within 5-10s without reasoning loops.",
+        "user": "Extract all data tables and structured grids from this document into clean HTML <table> structures with exact column headers and row alignment. Do not hallucinate."
     },
     OCRTaskType.DOCUMENT_RECONSTRUCTION: {
-        "system": "You are an expert Document Layout and Semantic Reconstruction AI.",
+        "system": "You are an expert Document Layout and Semantic Reconstruction AI. Reconstruct documents cleanly within 5-10s without reasoning loops.",
         "user": "Faithfully reconstruct the full document layout, headings, text sections, tables, and figures into semantic, publication-grade Markdown."
     },
     OCRTaskType.CUSTOM: {
         "system": "You are an expert Vision-Language Document AI.",
-        "user": "Extract and transcribe all content from this document accurately."
+        "user": "Extract and transcribe all content from this document accurately without reasoning loops or hallucination."
     }
 }
 
@@ -252,9 +263,15 @@ async def process_ocr_upload(
 ):
     try:
         file_bytes = await file.read()
-        doc_res = ImageProcessor.process_document(file_bytes)
+        if ImageProcessor.is_pdf(file_bytes):
+            b64_pdf = base64.b64encode(file_bytes).decode("utf-8")
+            doc_uri = f"data:application/pdf;base64,{b64_pdf}"
+        else:
+            doc_res = ImageProcessor.process_document(file_bytes)
+            doc_uri = doc_res["primary_data_uri"]
+
         req = OCRRequest(
-            document=doc_res["primary_data_uri"],
+            document=doc_uri,
             format=format,
             task_type=task_type or OCRTaskType.MEDICAL_EXTRACTION,
             prompt=prompt,
