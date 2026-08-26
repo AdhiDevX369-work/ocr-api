@@ -9,11 +9,21 @@ import time
 import json
 import base64
 import glob
-import httpx
+import urllib.request
 import requests
-import pandas as pd
 import streamlit as st
 from PIL import Image
+
+try:
+    import httpx
+except ImportError:
+    httpx = None
+
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 from app.config import settings
 
 # Page Configuration
@@ -124,23 +134,30 @@ with st.sidebar:
 
     # Engine Selection
     engine_choice = st.selectbox(
-        "🚀 OCR Engine",
+        "🚀 OCR Engine Pipeline",
         options=[
-            "Vision LLM (Production SOTA)",
-            "Native Sub-Second OCR (Non-LLM)"
+            "🏎️ Hybrid Pipeline (Fast OCR + Mistral Structurer)",
+            "⚡ Vision LLM (Direct Multimodal - Ministral-3)",
+            "🚀 Native Sub-Second OCR (Non-LLM Optical)"
         ],
         index=0,
-        help="Vision LLM provides highest clinical accuracy. Native OCR provides sub-second raw optical extraction."
+        help="Hybrid Pipeline extracts raw text in 2s with Native OCR and structures clinical data with Mistral in text-only mode."
     )
-    engine_param = "vocr" if "Vision" in engine_choice else "native"
 
-    # Backend Selection
-    if engine_param == "vocr":
+    if "Hybrid" in engine_choice:
+        engine_param = "hybrid"
+    elif "Vision" in engine_choice:
+        engine_param = "vocr"
+    else:
+        engine_param = "native"
+
+    # Backend & Model Selection
+    if engine_param in ("vocr", "hybrid"):
         backend_options = ["ollama", "llm-server", "llama-cpp"]
         default_backend_idx = backend_options.index(settings.default_backend) if settings.default_backend in backend_options else 0
         backend = st.selectbox("LLM Backend", options=backend_options, index=default_backend_idx)
         
-        env_model = settings.default_model
+        env_model = settings.default_model or "ministral-3:latest"
         known_models = ["ministral-3:latest", "medgemma:latest", "qwen3-vl:4b-fast", "qwen2.5vl:latest", "deepseek-ocr:3b", "qwen2.5:7b"]
         if env_model and env_model not in known_models:
             known_models.insert(0, env_model)
@@ -148,7 +165,7 @@ with st.sidebar:
         default_model_idx = known_models.index(env_model) if env_model in known_models else 0
 
         selected_model_option = st.selectbox(
-            "Vision / LLM Model",
+            "Classifier / Structurer Model" if engine_param == "hybrid" else "Vision LLM Model",
             options=known_models + ["Custom..."],
             index=default_model_idx,
             help=f"Active default model in .env: '{env_model}'"
@@ -398,8 +415,11 @@ with tab_single:
         # Results Table
         st.markdown(f"#### 🧪 Extracted Observations ({len(results)} items)")
         if results:
-            df_results = pd.DataFrame(results)
-            st.dataframe(df_results, use_container_width=True)
+            if pd is not None:
+                df_results = pd.DataFrame(results)
+                st.dataframe(df_results, use_container_width=True)
+            else:
+                st.table(results)
         else:
             st.info("No test observation rows parsed.")
 
