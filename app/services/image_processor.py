@@ -60,9 +60,9 @@ class ImageProcessor:
         return None
 
     @staticmethod
-    def render_pdf_to_pil_images(pdf_bytes: bytes, dpi: int = 150) -> list[Image.Image]:
+    def render_pdf_to_pil_images(pdf_bytes: bytes, dpi: int = 110) -> list[Image.Image]:
         """
-        Renders PDF pages into individual PIL images at high clarity (150-200 DPI).
+        Renders PDF pages into individual PIL images at optimal clarity (100-120 DPI).
         Tries pypdfium2 first, then PyMuPDF (fitz), then pdf2image.
         """
         images = []
@@ -71,8 +71,8 @@ class ImageProcessor:
         try:
             import pypdfium2 as pdfium
             pdf = pdfium.PdfDocument(pdf_bytes)
-            # scale=2 gives ~144-150 dpi
-            scale = max(1.5, dpi / 72.0)
+            # scale=1.5 gives ~108-110 dpi (optimal vision patch token ratio)
+            scale = max(1.2, dpi / 72.0)
             for page in pdf:
                 image = page.render(scale=scale).to_pil()
                 images.append(image)
@@ -138,10 +138,10 @@ class ImageProcessor:
         if scale < 1.0:
             new_w = max(1, int(w * scale))
             new_h = max(1, int(h * scale))
-            image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            image = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
 
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=quality, optimize=True, subsampling=0)
+        image.save(buffer, format="JPEG", quality=quality, optimize=False, subsampling=0)
         b64_encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
         return f"data:image/jpeg;base64,{b64_encoded}"
 

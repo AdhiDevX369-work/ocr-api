@@ -162,7 +162,7 @@ async def process_ocr_upload(
     backend: Optional[str] = Form(None),
     model: Optional[str] = Form(None),
     temperature: float = Form(0.0),
-    max_tokens: int = Form(4096)
+    max_tokens: int = Form(1536)
 ):
     try:
         file_bytes = await file.read()
