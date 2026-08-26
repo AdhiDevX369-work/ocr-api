@@ -56,13 +56,17 @@ STAGE2_MEDICAL_USER_TEMPLATE = (
 class DualLayerPipeline:
     def __init__(self):
         self.default_ocr_model = "deepseek-ocr:3b"
-        self.default_structurer_model = "ministral-3:latest"
+        self.default_ocr_backend = "ollama"
+        self.default_structurer_model = "Qwen3.5-4B-BF16.gguf"
+        self.default_structurer_backend = "llm-server"  # Port 8100
 
     async def run(
         self,
         page_uris: List[str],
         ocr_model: Optional[str] = None,
+        ocr_backend: Optional[str] = None,
         structurer_model: Optional[str] = None,
+        structurer_backend: Optional[str] = None,
         backend: Optional[str] = None,
         task_type: OCRTaskType = OCRTaskType.MEDICAL_EXTRACTION,
         temperature: float = 0.0,
@@ -71,15 +75,17 @@ class DualLayerPipeline:
     ) -> Tuple[Dict[str, Any], str, Dict[str, float], Dict[str, str]]:
         """
         Executes 2-Stage Cascaded OCR Pipeline:
-        Stage 1: High-Speed Document & Table Vision OCR (DeepSeek-OCR) -> Raw HTML/Markdown layout
-        Stage 2: Semantic Clinical Structurer (Ministral-3) -> Strict Structured JSON
+        Stage 1: High-Speed Document & Table Vision OCR (DeepSeek-OCR via Ollama) -> Raw HTML/Markdown layout
+        Stage 2: Semantic Clinical Structurer (Port 8100 LLM Server) -> Strict Structured JSON
         
         Returns:
             (parsed_json_dict, raw_ocr_text, stage_timings, used_models)
         """
-        target_backend = backend or settings.default_backend
+        target_ocr_backend = ocr_backend or self.default_ocr_backend
         target_ocr_model = ocr_model or self.default_ocr_model
-        target_structurer_model = structurer_model or settings.default_model or self.default_structurer_model
+        
+        target_structurer_backend = structurer_backend or (backend if backend in ("llm-server", "llama-cpp") else self.default_structurer_backend)
+        target_structurer_model = structurer_model or self.default_structurer_model
 
         # ---------------------------------------------------------
         # STAGE 1: Vision OCR (Image -> Markdown/HTML Layout)
@@ -107,7 +113,7 @@ class DualLayerPipeline:
         stage1_res = await llm_client.chat_completion(
             messages=stage1_messages,
             model=target_ocr_model,
-            backend=target_backend,
+            backend=target_ocr_backend,
             temperature=temperature,
             max_tokens=max_tokens,
             stream=False,
@@ -126,9 +132,9 @@ class DualLayerPipeline:
             return {"report_title": "Laboratory Report", "patient_info": {}, "results": []}, "", {"stage1_ocr_seconds": stage1_duration, "stage2_structurer_seconds": 0.0}, {"ocr_model": used_ocr_model, "structurer_model": target_structurer_model}
 
         # ---------------------------------------------------------
-        # STAGE 2: Clinical Structuring (Text -> Clean JSON)
+        # STAGE 2: Clinical Structuring (Text -> Clean JSON via Port 8100)
         # ---------------------------------------------------------
-        logger.info(f"DualLayerPipeline Stage 2: Running Clinical Structuring with [{target_structurer_model}] on [{target_backend}]")
+        logger.info(f"DualLayerPipeline Stage 2: Running Clinical Structuring with [{target_structurer_model}] on [{target_structurer_backend}]")
         t2 = time.monotonic()
 
         stage2_system_prompt = STAGE2_MEDICAL_SYSTEM_PROMPT
@@ -142,7 +148,7 @@ class DualLayerPipeline:
         stage2_res = await llm_client.chat_completion(
             messages=stage2_messages,
             model=target_structurer_model,
-            backend=target_backend,
+            backend=target_structurer_backend,
             temperature=temperature,
             max_tokens=max_tokens,
             stream=False,
