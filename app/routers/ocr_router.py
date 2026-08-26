@@ -7,12 +7,11 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
 from app.config import settings
-from app.schemas.ocr import OCRRequest, OCRResponse, OCRFormat, OCRTaskType, PipelineMode
+from app.schemas.ocr import OCRRequest, OCRResponse, OCRFormat, OCRTaskType
 from app.schemas.medical import MedicalReportExtraction
 from app.services.image_processor import ImageProcessor, ImageProcessingError
 from app.services.llm_client import llm_client, LLMClientError
 from app.services.schema_validator import SchemaValidator
-from app.services.dual_pipeline import dual_pipeline
 
 logger = logging.getLogger("ocr-router")
 
@@ -141,39 +140,9 @@ async def process_ocr_sync(request: OCRRequest):
         page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
         page_count = len(page_uris)
 
-        # 2. Check for Dual-Layer Pipeline Mode
-        if request.pipeline == PipelineMode.DUAL and request.format == OCRFormat.JSON:
-            parsed_data, raw_ocr_text, stage_timings, used_models = await dual_pipeline.run(
-                page_uris=page_uris,
-                ocr_model=request.ocr_model,
-                structurer_model=request.structurer_model,
-                structurer_backend=request.structurer_backend,
-                backend=target_backend,
-                task_type=request.task_type,
-                temperature=request.temperature,
-                max_tokens=request.max_tokens,
-                strict_schema=request.strict_schema
-            )
-            duration = round(time.monotonic() - start_time, 2)
-            now_iso = datetime.now(timezone.utc).isoformat()
-            return OCRResponse(
-                status="success",
-                format=request.format,
-                task_type=request.task_type,
-                pipeline=PipelineMode.DUAL,
-                backend=request.structurer_backend or "llm-server",
-                model=f"{used_models.get('ocr_model')} -> {used_models.get('structurer_model')}",
-                data=parsed_data,
-                raw_text=raw_ocr_text,
-                duration_seconds=duration,
-                stage_timings=stage_timings,
-                page_count=page_count,
-                created_at=now_iso
-            )
-
         system_prompt, user_prompt = resolve_prompts(request)
 
-        # 3. Build Multi-modal User Turn containing all pages
+        # 2. Build Multi-modal User Turn containing all pages
         user_content: List[Dict[str, Any]] = [{"type": "text", "text": user_prompt}]
         for uri in page_uris:
             user_content.append({"type": "image_url", "image_url": {"url": uri}})
@@ -183,7 +152,7 @@ async def process_ocr_sync(request: OCRRequest):
             {"role": "user", "content": user_content}
         ]
 
-        # 4. Call LLM
+        # 3. Call LLM
         raw_res = await llm_client.chat_completion(
             messages=messages,
             model=target_model,
@@ -200,7 +169,7 @@ async def process_ocr_sync(request: OCRRequest):
         duration = round(time.monotonic() - start_time, 2)
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        # 5. Format Output
+        # 4. Format Output
         if request.format == OCRFormat.JSON:
             target_schema = MedicalReportExtraction if (request.task_type == OCRTaskType.MEDICAL_EXTRACTION and request.strict_schema) else None
             parsed_data, err = SchemaValidator.parse_and_validate(raw_output, target_schema)
@@ -208,7 +177,6 @@ async def process_ocr_sync(request: OCRRequest):
                 status="success",
                 format=request.format,
                 task_type=request.task_type,
-                pipeline=PipelineMode.SINGLE,
                 backend=target_backend,
                 model=used_model,
                 data=parsed_data if parsed_data else {"raw": raw_output},
@@ -222,7 +190,6 @@ async def process_ocr_sync(request: OCRRequest):
                 status="success",
                 format=request.format,
                 task_type=request.task_type,
-                pipeline=PipelineMode.SINGLE,
                 backend=target_backend,
                 model=used_model,
                 data=raw_output,
@@ -294,10 +261,6 @@ async def process_ocr_upload(
     file: UploadFile = File(..., description="PDF document or Image file to extract"),
     format: OCRFormat = Form(OCRFormat.JSON),
     task_type: Optional[OCRTaskType] = Form(OCRTaskType.MEDICAL_EXTRACTION),
-    pipeline: PipelineMode = Form(PipelineMode.SINGLE),
-    ocr_model: Optional[str] = Form(None),
-    structurer_model: Optional[str] = Form(None),
-    structurer_backend: Optional[str] = Form(None),
     prompt: Optional[str] = Form(None),
     system_prompt: Optional[str] = Form(None),
     backend: Optional[str] = Form(None),
@@ -318,10 +281,6 @@ async def process_ocr_upload(
             document=doc_uri,
             format=format,
             task_type=task_type or OCRTaskType.MEDICAL_EXTRACTION,
-            pipeline=pipeline,
-            ocr_model=ocr_model,
-            structurer_model=structurer_model,
-            structurer_backend=structurer_backend,
             prompt=prompt,
             system_prompt=system_prompt,
             backend=backend,
@@ -334,4 +293,5 @@ async def process_ocr_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"File OCR failed: {str(e)}")
+
 
