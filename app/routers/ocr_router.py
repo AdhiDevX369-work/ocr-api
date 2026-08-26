@@ -108,6 +108,12 @@ def resolve_prompts(request: OCRRequest) -> tuple[str, str]:
 
     system_prompt = request.system_prompt or preset["system"]
     user_prompt = request.prompt or preset["user"]
+
+    target_model = (request.model or settings.default_model).lower()
+    if any(k in target_model for k in ["deepseek-ocr", "deepseek", "got-ocr"]) and not request.prompt:
+        system_prompt = "You are an expert Document Layout and Vision OCR AI. Transcribe all text, patient demographics, and tables accurately."
+        user_prompt = "Transcribe all patient demographics, report title, and clinical lab test observations and tables on this page into clean markdown/HTML tables."
+
     return system_prompt, user_prompt
 
 

@@ -260,7 +260,9 @@ class LLMClient:
                 "num_predict": max_tokens if max_tokens else 8192
             }
         }
-        if json_mode:
+        # Specialized layout/table models (e.g. deepseek-ocr) output structured HTML/Markdown
+        is_layout_model = any(k in (model or self.default_model).lower() for k in ["deepseek-ocr", "deepseek", "got-ocr"])
+        if json_mode and not is_layout_model:
             payload["format"] = "json"
         return payload
 
