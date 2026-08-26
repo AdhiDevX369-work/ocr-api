@@ -184,9 +184,13 @@ class SchemaValidator:
             unit = item.get("unit") or item.get("units") or item.get("measurement_unit") or ""
             unit_str = str(unit).strip() if unit is not None else ""
 
-            # 4. Extract or generate slug type
+            # 4. Extract or generate slug type (prioritizing specific parameter name over broad category names)
+            generic_categories = {
+                "leucocytes", "erythrocytes", "platelets", "investigations", "general",
+                "parameters", "tests", "test", "results", "blood", "urine", "biochemistry"
+            }
             slug_type = item.get("type") or ""
-            if not slug_type or not isinstance(slug_type, str) or slug_type.strip() == "":
+            if not slug_type or not isinstance(slug_type, str) or slug_type.strip().lower() in generic_categories:
                 slug_type = cls.slugify_test_name(name_str)
             else:
                 slug_type = cls.slugify_test_name(slug_type)
