@@ -13,6 +13,7 @@ from app.services.image_processor import ImageProcessor, ImageProcessingError
 from app.services.llm_client import llm_client, LLMClientError
 from app.services.schema_validator import SchemaValidator
 from app.services.native_ocr_service import native_ocr_service
+from app.services.hybrid_pipeline import hybrid_pipeline_service
 
 logger = logging.getLogger("ocr-router")
 
@@ -140,7 +141,41 @@ async def process_ocr_sync(request: OCRRequest):
         page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
         page_count = len(page_uris)
 
-        # 2. Check for Native Sub-Second OCR Engine (Non-LLM)
+        # 2. Check for Hybrid Engine (Fast Native OCR -> Mistral Classifier)
+        if request.engine == OCREngine.HYBRID:
+            all_lines: List[str] = []
+            combined_data: Dict[str, Any] = {}
+            for uri in page_uris:
+                b64_str = uri.split(",")[-1]
+                img_bytes = base64.b64decode(b64_str)
+                page_data, page_lines, s1_dur, tot_dur = await hybrid_pipeline_service.process_image_bytes(
+                    img_bytes,
+                    classifier_model=target_model or "ministral-3:latest",
+                    classifier_backend=target_backend or "ollama"
+                )
+                all_lines.extend(page_lines)
+                if not combined_data:
+                    combined_data = page_data
+                else:
+                    combined_data.setdefault("results", []).extend(page_data.get("results", []))
+
+            duration = round(time.monotonic() - start_time, 3)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            return OCRResponse(
+                status="success",
+                format=request.format,
+                task_type=request.task_type,
+                engine=OCREngine.HYBRID,
+                backend=target_backend or "ollama",
+                model=target_model or "ministral-3:latest",
+                data=combined_data if request.format == OCRFormat.JSON else "\n".join(all_lines),
+                raw_text="\n".join(all_lines),
+                duration_seconds=duration,
+                page_count=page_count,
+                created_at=now_iso
+            )
+
+        # 3. Check for Native Sub-Second OCR Engine (Non-LLM)
         if request.engine in (OCREngine.NATIVE, OCREngine.PADDLE_OCR):
             all_lines: List[str] = []
             combined_data: Dict[str, Any] = {}

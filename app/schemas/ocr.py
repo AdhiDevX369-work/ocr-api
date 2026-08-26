@@ -24,6 +24,7 @@ class DocumentType(str, Enum):
 
 class OCREngine(str, Enum):
     VISION_LLM = "vocr"     # Direct Vision LLM (Ministral-3)
+    HYBRID = "hybrid"       # Fast Native OCR -> Mistral Text Classifier
     NATIVE = "native"       # Ultra-Fast Sub-Second Native OCR (Non-LLM)
     PADDLE_OCR = "paddle"   # Alias for Native OCR
 
