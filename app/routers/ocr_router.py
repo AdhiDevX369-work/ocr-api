@@ -148,6 +148,34 @@ async def process_ocr_stream(request: OCRRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
+DEFAULT_SYSTEM_PROMPT = "You are an expert Medical Report OCR AI. Extract patient metadata and all lab test parameters into strict, valid JSON."
+DEFAULT_USER_PROMPT = (
+    "Extract all test parameters and patient info into JSON matching this exact structure:\n"
+    "{\n"
+    '  "report_title": "Full Blood Count",\n'
+    '  "patient_info": {\n'
+    '    "patient_name": "MISS TOPH",\n'
+    '    "pid_no": "18353",\n'
+    '    "age": "20 Years",\n'
+    '    "sex": "Female",\n'
+    '    "tel_no": "",\n'
+    '    "reference_dr": "",\n'
+    '    "registered_on": "",\n'
+    '    "collected_on": "",\n'
+    '    "reported_on": ""\n'
+    "  },\n"
+    '  "results": [\n'
+    "    {\n"
+    '      "type": "hba1c",\n'
+    '      "name": "HbA1C",\n'
+    '      "value": "85",\n'
+    '      "unit": "%"\n'
+    "    }\n"
+    "  ]\n"
+    "}\n"
+    "Ensure every test parameter is listed in the results array with type, name, value, and unit."
+)
+
 @router.post(
     "/upload",
     response_model=OCRResponse,
@@ -157,8 +185,8 @@ async def process_ocr_stream(request: OCRRequest):
 async def process_ocr_upload(
     file: UploadFile = File(..., description="PDF document or Image file to extract"),
     format: OCRFormat = Form(OCRFormat.JSON),
-    prompt: Optional[str] = Form("Extract all medical report data into structured JSON with 100% precision."),
-    system_prompt: Optional[str] = Form("You are an expert Medical Report OCR and Verification AI."),
+    prompt: Optional[str] = Form(DEFAULT_USER_PROMPT),
+    system_prompt: Optional[str] = Form(DEFAULT_SYSTEM_PROMPT),
     backend: Optional[str] = Form(None),
     model: Optional[str] = Form(None),
     temperature: float = Form(0.0),

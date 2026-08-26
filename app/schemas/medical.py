@@ -14,29 +14,32 @@ class PatientInfo(BaseModel):
     collected_on: Optional[str] = Field(None, description="Sample collection date & timestamp")
     reported_on: Optional[str] = Field(None, description="Lab report release date & timestamp")
 
+class ResultItem(BaseModel):
+    type: str = Field(..., description="Standardized slug/type of the test (e.g. 'hba1c', 'fbs', 'wbc_count', 'hemoglobin')")
+    name: str = Field(..., description="Human readable parameter name (e.g. 'HbA1C', 'FBS', 'WBC Count')")
+    value: Union[str, int, float] = Field("", description="Observed parameter value (e.g. '85', '12.0', '')")
+    unit: Optional[str] = Field("", description="Measurement unit (e.g. '%', 'mg/dL', 'g/dL')")
+
+# Backward compatibility aliases
 class InvestigationItem(BaseModel):
-    section: Optional[str] = Field(None, description="Section heading (e.g. 'LEUCOCYTES', 'ERYTHROCYTES', 'LIPID PROFILE')")
-    investigation: str = Field(..., description="Test parameter name (e.g. 'Haemoglobin', 'W.B.C', 'Total Cholesterol')")
-    observed_value: Union[str, int, float] = Field(..., description="Printed result value (e.g. '13.2', 7500, '180')")
-    flag: Optional[str] = Field(None, description="Abnormality flag ('H' for High, 'L' for Low, '*' if flagged)")
-    unit: Optional[str] = Field(None, description="Measurement unit (e.g. 'g/dL', '/cumm', 'mg/dL', 'mmol/L')")
-    reference_interval: Optional[Union[str, int, float]] = Field(None, description="Biological reference interval / normal range")
-    is_abnormal: Optional[bool] = Field(False, description="Calculated or flagged indicator if value is out of range")
+    type: Optional[str] = Field(None)
+    name: Optional[str] = Field(None)
+    investigation: Optional[str] = Field(None)
+    observed_value: Optional[Union[str, int, float]] = Field("")
+    value: Optional[Union[str, int, float]] = Field("")
+    unit: Optional[str] = Field("")
 
 class SignatureItem(BaseModel):
-    signatory_name: Optional[str] = Field(None, description="Name of doctor or lab technician")
-    designation: Optional[str] = Field(None, description="Designation (e.g. 'Consultant Haematologist', 'MLT')")
+    signatory_name: Optional[str] = Field(None)
+    designation: Optional[str] = Field(None)
 
 class AdditionalTable(BaseModel):
-    table_name: str = Field(..., description="Table title (e.g. 'AVERAGE ESTIMATED GFR BY AGE', 'NCEP ATP III GUIDELINES')")
-    headers: List[str] = Field(default_factory=list, description="Column header titles")
-    rows: List[List[str]] = Field(default_factory=list, description="Row values")
+    table_name: str = Field(...)
+    headers: List[str] = Field(default_factory=list)
+    rows: List[List[str]] = Field(default_factory=list)
 
 class MedicalReportExtraction(BaseModel):
     report_title: Optional[str] = Field("Medical Report", description="Title of report (e.g. 'FULL BLOOD COUNT', 'LIPID PROFILE', 'eGFR')")
     patient_info: PatientInfo = Field(default_factory=PatientInfo, description="Patient metadata")
-    investigations: List[InvestigationItem] = Field(default_factory=list, description="Extracted lab test parameters")
-    additional_tables: Optional[List[AdditionalTable]] = Field(default_factory=list, description="Reference grids / risk charts")
-    footnotes: Optional[str] = Field(None, description="Footnotes, methodologies, or instrument notes")
-    signatures: Optional[List[SignatureItem]] = Field(default_factory=list, description="Doctor and technician signatures")
+    results: List[ResultItem] = Field(default_factory=list, description="Standardized list of test results")
     raw_text: Optional[str] = Field(None, description="Complete transcribed text of document")

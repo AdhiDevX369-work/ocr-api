@@ -27,6 +27,7 @@ from app.schemas.ocr import (
 )
 from app.schemas.medical import (
     PatientInfo,
+    ResultItem,
     InvestigationItem,
     SignatureItem,
     AdditionalTable,
@@ -54,6 +55,7 @@ __all__ = [
     "OCRResponse",
     "OCRStreamChunk",
     "PatientInfo",
+    "ResultItem",
     "InvestigationItem",
     "SignatureItem",
     "AdditionalTable",

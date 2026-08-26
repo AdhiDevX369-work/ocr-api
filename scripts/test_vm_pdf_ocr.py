@@ -79,15 +79,11 @@ def test_single_pdf_upload(pdf_path: str):
             logger.info(f"Report Title: {extracted.get('report_title')}")
             patient = extracted.get("patient_info", {})
             logger.info(f"Patient Name: {patient.get('patient_name')} | Age: {patient.get('age')} | Sex: {patient.get('sex')}")
-            investigations = extracted.get("investigations", [])
-            if isinstance(investigations, list):
-                logger.info(f"Extracted {len(investigations)} investigation parameter(s):")
-                for item in investigations[:4]:
-                    logger.info(f"  * {item.get('investigation')}: {item.get('observed_value')} {item.get('unit')} (Ref: {item.get('reference_interval')})")
-            elif isinstance(investigations, dict):
-                logger.info(f"Extracted {len(investigations)} investigation parameter group(s):")
-                for k, v in list(investigations.items())[:4]:
-                    logger.info(f"  * {k}: {v}")
+            results = extracted.get("results", [])
+            if isinstance(results, list):
+                logger.info(f"Extracted {len(results)} standardized test result item(s):")
+                for item in results[:5]:
+                    logger.info(f"  * [{item.get('type')}] {item.get('name')}: {item.get('value')} {item.get('unit')}")
         return res_json
 
 def test_multi_pdf_batch(pdf_paths: list):

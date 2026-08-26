@@ -92,33 +92,30 @@ Performs synchronous OCR data extraction from a Base64 data URI, HTTP URL, or Cl
       "age": "20 Years",
       "sex": "Female",
       "reference_dr": "DR. SMITH",
-      "sample_collected_at": "Main Branch",
-      "collecting_center": "Lab Central",
       "registered_on": "2026-08-25 09:00",
       "collected_on": "2026-08-25 09:15",
       "reported_on": "2026-08-25 11:30"
     },
-    "investigations": [
+    "results": [
       {
-        "section": "LEUCOCYTES",
-        "investigation": "W.B.C",
-        "observed_value": "3000",
-        "flag": "L",
-        "unit": "/cumm",
-        "reference_interval": "4000 - 11000"
+        "type": "wbc_count",
+        "name": "WBC Count",
+        "value": "3000",
+        "unit": "cells/mm³"
       },
       {
-        "section": "HAEMOGLOBIN",
-        "investigation": "Haemoglobin",
-        "observed_value": "12.5",
-        "flag": null,
-        "unit": "g/dL",
-        "reference_interval": "11.5 - 15.5"
+        "type": "hemoglobin",
+        "name": "Haemoglobin",
+        "value": "12.5",
+        "unit": "g/dL"
+      },
+      {
+        "type": "platelet_count",
+        "name": "Platelet Count",
+        "value": "110000",
+        "unit": "/µl"
       }
-    ],
-    "additional_tables": [],
-    "footnotes": "Sample analyzed using Automated Hematology Analyzer.",
-    "signatures": ["Dr. Jane Doe, Consultant Hematologist"]
+    ]
   },
   "duration_seconds": 1.62,
   "tokens_used": 0,
