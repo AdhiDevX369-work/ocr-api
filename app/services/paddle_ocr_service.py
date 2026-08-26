@@ -23,7 +23,7 @@ class PaddleOCRService:
                 from paddleocr import PaddleOCR
                 # use_gpu can be dynamically enabled if paddle is compiled with CUDA
                 logger.info("Initializing Native PaddleOCR Engine (PP-OCRv4)...")
-                self._ocr = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
+                self._ocr = PaddleOCR(use_angle_cls=True, lang="en")
                 self._initialized = True
                 logger.info("Native PaddleOCR Engine initialized successfully.")
             except Exception as e:
