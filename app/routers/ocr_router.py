@@ -7,11 +7,12 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
 from app.config import settings
-from app.schemas.ocr import OCRRequest, OCRResponse, OCRFormat, OCRTaskType
+from app.schemas.ocr import OCRRequest, OCRResponse, OCRFormat, OCRTaskType, OCREngine
 from app.schemas.medical import MedicalReportExtraction
 from app.services.image_processor import ImageProcessor, ImageProcessingError
 from app.services.llm_client import llm_client, LLMClientError
 from app.services.schema_validator import SchemaValidator
+from app.services.paddle_ocr_service import paddle_ocr_service
 
 logger = logging.getLogger("ocr-router")
 
@@ -140,9 +141,40 @@ async def process_ocr_sync(request: OCRRequest):
         page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
         page_count = len(page_uris)
 
+        # 2. Check for Native PaddleOCR Engine
+        if request.engine == OCREngine.PADDLE_OCR:
+            all_lines: List[str] = []
+            combined_data: Dict[str, Any] = {}
+            for uri in page_uris:
+                b64_str = uri.split(",")[-1]
+                img_bytes = base64.b64decode(b64_str)
+                page_data, page_lines, _ = paddle_ocr_service.process_image(img_bytes)
+                all_lines.extend(page_lines)
+                if not combined_data:
+                    combined_data = page_data
+                else:
+                    # Merge results
+                    combined_data["results"].extend(page_data.get("results", []))
+
+            duration = round(time.monotonic() - start_time, 3)
+            now_iso = datetime.now(timezone.utc).isoformat()
+            return OCRResponse(
+                status="success",
+                format=request.format,
+                task_type=request.task_type,
+                engine=OCREngine.PADDLE_OCR,
+                backend="native-paddle",
+                model="PaddleOCR-PP-OCRv4",
+                data=combined_data if request.format == OCRFormat.JSON else "\n".join(all_lines),
+                raw_text="\n".join(all_lines),
+                duration_seconds=duration,
+                page_count=page_count,
+                created_at=now_iso
+            )
+
         system_prompt, user_prompt = resolve_prompts(request)
 
-        # 2. Build Multi-modal User Turn containing all pages
+        # 3. Build Multi-modal User Turn containing all pages
         user_content: List[Dict[str, Any]] = [{"type": "text", "text": user_prompt}]
         for uri in page_uris:
             user_content.append({"type": "image_url", "image_url": {"url": uri}})
@@ -152,7 +184,7 @@ async def process_ocr_sync(request: OCRRequest):
             {"role": "user", "content": user_content}
         ]
 
-        # 3. Call LLM
+        # 4. Call LLM
         raw_res = await llm_client.chat_completion(
             messages=messages,
             model=target_model,
@@ -169,7 +201,7 @@ async def process_ocr_sync(request: OCRRequest):
         duration = round(time.monotonic() - start_time, 2)
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        # 4. Format Output
+        # 5. Format Output
         if request.format == OCRFormat.JSON:
             target_schema = MedicalReportExtraction if (request.task_type == OCRTaskType.MEDICAL_EXTRACTION and request.strict_schema) else None
             parsed_data, err = SchemaValidator.parse_and_validate(raw_output, target_schema)
@@ -177,6 +209,7 @@ async def process_ocr_sync(request: OCRRequest):
                 status="success",
                 format=request.format,
                 task_type=request.task_type,
+                engine=OCREngine.VISION_LLM,
                 backend=target_backend,
                 model=used_model,
                 data=parsed_data if parsed_data else {"raw": raw_output},
@@ -190,6 +223,7 @@ async def process_ocr_sync(request: OCRRequest):
                 status="success",
                 format=request.format,
                 task_type=request.task_type,
+                engine=OCREngine.VISION_LLM,
                 backend=target_backend,
                 model=used_model,
                 data=raw_output,
@@ -261,6 +295,7 @@ async def process_ocr_upload(
     file: UploadFile = File(..., description="PDF document or Image file to extract"),
     format: OCRFormat = Form(OCRFormat.JSON),
     task_type: Optional[OCRTaskType] = Form(OCRTaskType.MEDICAL_EXTRACTION),
+    engine: OCREngine = Form(OCREngine.VISION_LLM),
     prompt: Optional[str] = Form(None),
     system_prompt: Optional[str] = Form(None),
     backend: Optional[str] = Form(None),
@@ -281,6 +316,7 @@ async def process_ocr_upload(
             document=doc_uri,
             format=format,
             task_type=task_type or OCRTaskType.MEDICAL_EXTRACTION,
+            engine=engine,
             prompt=prompt,
             system_prompt=system_prompt,
             backend=backend,
@@ -293,5 +329,6 @@ async def process_ocr_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"File OCR failed: {str(e)}")
+
 
 

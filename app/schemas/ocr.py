@@ -22,10 +22,15 @@ class DocumentType(str, Enum):
     PDF = "pdf"
     IMAGE = "image"
 
+class OCREngine(str, Enum):
+    VISION_LLM = "vocr"     # Direct Vision LLM (Ministral-3)
+    PADDLE_OCR = "paddle"   # Ultra-Fast Native Non-LLM PaddleOCR
+
 class OCRRequest(BaseModel):
     document: str = Field(..., description="Base64 Data URI or HTTP URL of PDF or Image scan")
     format: OCRFormat = Field(OCRFormat.JSON, description="Desired output format: 'json', 'markdown', 'html', 'latex', or 'text'")
     task_type: OCRTaskType = Field(OCRTaskType.MEDICAL_EXTRACTION, description="Task preset: 'general_ocr', 'medical_extraction', 'table_extraction', 'document_reconstruction', 'custom'")
+    engine: OCREngine = Field(OCREngine.VISION_LLM, description="OCR Engine: 'vocr' (Vision LLM) or 'paddle' (Native High-Speed OCR)")
     prompt: Optional[str] = Field(None, description="Custom prompt instructions. If omitted, task_type default is used.")
     system_prompt: Optional[str] = Field(None, description="System instruction. If omitted, task_type default is used.")
     backend: Optional[str] = Field(None, description="LLM backend ('ollama', 'vllm', 'llama-cpp', 'llm-server')")
@@ -38,6 +43,7 @@ class OCRResponse(BaseModel):
     status: str = "success"
     format: OCRFormat
     task_type: Optional[OCRTaskType] = None
+    engine: Optional[OCREngine] = None
     backend: str
     model: str
     data: Union[Dict[str, Any], str] = Field(..., description="Structured JSON object or formatted markdown/html text")
