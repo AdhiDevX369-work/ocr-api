@@ -151,30 +151,31 @@ class LLMClient:
         # Prioritized vision model search terms
         vision_keywords = [
             "qwen3-vl", "qwen3vl", "qwen2.5vl", "qwen2.5-vl", "qwen-vl", "nanonets", 
-            "olmocr", "deepseek-ocr", "chandra", "paddleocr", "docling", 
+            "olmocr", "deepseek-ocr", "medgemma", "gemma", "chandra", "paddleocr", "docling", 
             "ministral-3", "ministral", "pixtral", "vl", "vision", "llava", "moondream", "gemma4"
         ]
 
-        # 1. If has_images=True, verify requested model supports vision or select a vision-capable model
-        if has_images:
-            if requested_model:
-                req_lower = requested_model.lower()
-                is_req_vision = any(vk in req_lower for vk in vision_keywords)
-                if is_req_vision:
-                    for m in available_models:
-                        m_id = m.get("id", "")
-                        m_aliases = [a.lower() for a in m.get("aliases", [])]
-                        if m_id.lower() == req_lower or req_lower in m_aliases or req_lower in m_id.lower():
-                            logger.info(f"Using requested vision model '{m_id}' on [{target_backend}]")
-                            return m_id
+        # 1. If requested model is specified and available on backend, ALWAYS use it directly
+        if requested_model:
+            req_lower = requested_model.lower()
+            for m in available_models:
+                m_id = m.get("id", "")
+                m_aliases = [a.lower() for a in m.get("aliases", [])]
+                if m_id.lower() == req_lower or req_lower in m_aliases or req_lower in m_id.lower() or m_id.lower() in req_lower:
+                    logger.info(f"Using explicitly requested model '{m_id}' on [{target_backend}]")
+                    return m_id
+            logger.info(f"Requested model '{requested_model}' not found in [{target_backend}] tags, using it directly as requested.")
+            return requested_model
 
-            # Priority 1: Check for qwen3-vl or qwen2.5vl in available models
-            for preferred in ["qwen3-vl", "qwen2.5vl", "qwen2.5-vl", "nanonets", "olmocr"]:
-                for m in available_models:
-                    m_id = m.get("id", "").lower()
-                    if preferred in m_id:
-                        logger.info(f"Auto-selected top SOTA vision model '{m['id']}' on [{target_backend}]")
-                        return m["id"]
+        # 2. If has_images=True, select best available vision model
+        if has_images:
+            # Priority 1: Check for default_model if vision-capable
+            def_lower = self.default_model.lower()
+            for m in available_models:
+                m_id = m.get("id", "")
+                if def_lower in m_id.lower() or m_id.lower() in def_lower:
+                    logger.info(f"Using default vision model '{m_id}' on [{target_backend}]")
+                    return m_id
 
             # Priority 2: Select first available vision-capable model
             for m in available_models:
