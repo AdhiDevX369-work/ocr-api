@@ -90,7 +90,7 @@ class DualLayerPipeline:
         # ---------------------------------------------------------
         # STAGE 1: Vision OCR (Image -> Markdown/HTML Layout)
         # ---------------------------------------------------------
-        logger.info(f"DualLayerPipeline Stage 1: Running Vision OCR with [{target_ocr_model}] on [{target_backend}]")
+        logger.info(f"DualLayerPipeline Stage 1: Running Vision OCR with [{target_ocr_model}] on [{target_ocr_backend}]")
         t0 = time.monotonic()
 
         stage1_user_content: List[Dict[str, Any]] = [
