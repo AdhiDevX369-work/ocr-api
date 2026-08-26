@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     llm_server_url: str = "http://localhost:8100"
     default_backend: str = "ollama"
-    default_model: str = "deepseek-ocr:3b"
+    default_model: str = "ministral-3:latest"
     llm_api_key: str = "sk_oWt_VA4WcX84xa18rjt-RovbNH7dwhmZjlrLeDVMIZo"
     streamlit_port: int = 8600
     pdf_render_dpi: int = 150
