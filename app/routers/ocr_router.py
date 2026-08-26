@@ -1,5 +1,6 @@
 import time
 import json
+import base64
 import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
