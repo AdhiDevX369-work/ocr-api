@@ -24,7 +24,8 @@ class DocumentType(str, Enum):
 
 class OCREngine(str, Enum):
     VISION_LLM = "vocr"     # Direct Vision LLM (Ministral-3)
-    PADDLE_OCR = "paddle"   # Ultra-Fast Native Non-LLM PaddleOCR
+    NATIVE = "native"       # Ultra-Fast Sub-Second Native OCR (Non-LLM)
+    PADDLE_OCR = "paddle"   # Alias for Native OCR
 
 class OCRRequest(BaseModel):
     document: str = Field(..., description="Base64 Data URI or HTTP URL of PDF or Image scan")

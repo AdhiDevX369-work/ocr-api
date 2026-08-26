@@ -12,7 +12,7 @@ from app.schemas.medical import MedicalReportExtraction
 from app.services.image_processor import ImageProcessor, ImageProcessingError
 from app.services.llm_client import llm_client, LLMClientError
 from app.services.schema_validator import SchemaValidator
-from app.services.paddle_ocr_service import paddle_ocr_service
+from app.services.native_ocr_service import native_ocr_service
 
 logger = logging.getLogger("ocr-router")
 
@@ -117,7 +117,6 @@ def resolve_prompts(request: OCRRequest) -> tuple[str, str]:
 
     return system_prompt, user_prompt
 
-
 @router.post(
     "",
     response_model=OCRResponse,
@@ -128,7 +127,7 @@ def resolve_prompts(request: OCRRequest) -> tuple[str, str]:
     "/sync",
     response_model=OCRResponse,
     summary="Synchronous Direct Vision OCR",
-    description="Processes a single PDF document or image scan synchronously and returns structured JSON or Markdown text."
+    description="Processes document scan (PDF or Image base64/URL) in a single direct pass."
 )
 async def process_ocr_sync(request: OCRRequest):
     start_time = time.monotonic()
@@ -136,25 +135,24 @@ async def process_ocr_sync(request: OCRRequest):
     target_model = request.model or settings.default_model
 
     try:
-        # 1. Process Document with Multi-Page extraction (no squashing)
+        # 1. Process Document Input
         doc_res = await ImageProcessor.process_document_input(request.document)
         page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
         page_count = len(page_uris)
 
-        # 2. Check for Native PaddleOCR Engine
-        if request.engine == OCREngine.PADDLE_OCR:
+        # 2. Check for Native Sub-Second OCR Engine (Non-LLM)
+        if request.engine in (OCREngine.NATIVE, OCREngine.PADDLE_OCR):
             all_lines: List[str] = []
             combined_data: Dict[str, Any] = {}
             for uri in page_uris:
                 b64_str = uri.split(",")[-1]
                 img_bytes = base64.b64decode(b64_str)
-                page_data, page_lines, _ = paddle_ocr_service.process_image(img_bytes)
+                page_data, page_lines, _ = native_ocr_service.process_image(img_bytes)
                 all_lines.extend(page_lines)
                 if not combined_data:
                     combined_data = page_data
                 else:
-                    # Merge results
-                    combined_data["results"].extend(page_data.get("results", []))
+                    combined_data.setdefault("results", []).extend(page_data.get("results", []))
 
             duration = round(time.monotonic() - start_time, 3)
             now_iso = datetime.now(timezone.utc).isoformat()
@@ -162,9 +160,9 @@ async def process_ocr_sync(request: OCRRequest):
                 status="success",
                 format=request.format,
                 task_type=request.task_type,
-                engine=OCREngine.PADDLE_OCR,
-                backend="native-paddle",
-                model="PaddleOCR-PP-OCRv4",
+                engine=request.engine,
+                backend="native-engine",
+                model="Native-OCR-PP",
                 data=combined_data if request.format == OCRFormat.JSON else "\n".join(all_lines),
                 raw_text="\n".join(all_lines),
                 duration_seconds=duration,
