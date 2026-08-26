@@ -7,15 +7,16 @@ class Settings(BaseSettings):
     llama_cpp_url: str = "http://localhost:8080"
     ollama_url: str = "http://localhost:11434"
     llm_server_url: str = "http://localhost:8100"
-    default_backend: str = "llm-server"
-    default_model: str = "ministral-3:latest"
+    default_backend: str = "ollama"
+    default_model: str = "qwen3-vl:4b"
     llm_api_key: str = "sk_oWt_VA4WcX84xa18rjt-RovbNH7dwhmZjlrLeDVMIZo"
     streamlit_port: int = 8600
-    max_image_size_px: int = 768
-    max_stitched_height_px: int = 1200
-    image_jpeg_quality: int = 80
+    pdf_render_dpi: int = 150
+    max_image_size_px: int = 1536
+    max_stitched_height_px: int = 2400
+    image_jpeg_quality: int = 95
     llm_timeout: float = 300.0
-    ollama_num_ctx: int = 4096
+    ollama_num_ctx: int = 16384
     ollama_keep_alive: str = "24h"
     # Database & Storage
     database_url: str = "sqlite+aiosqlite:///./ocr.db"  # Defaults to async SQLite, override with postgresql+asyncpg://user:pass@host:5432/db in .env

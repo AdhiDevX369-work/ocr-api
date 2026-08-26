@@ -2,11 +2,11 @@ import time
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import StreamingResponse
 from app.config import settings
-from app.schemas.ocr import OCRRequest, OCRResponse, OCRFormat
+from app.schemas.ocr import OCRRequest, OCRResponse, OCRFormat, OCRTaskType
 from app.schemas.medical import MedicalReportExtraction
 from app.services.image_processor import ImageProcessor, ImageProcessingError
 from app.services.llm_client import llm_client, LLMClientError
@@ -22,6 +22,82 @@ SSE_HEADERS = {
 }
 
 router = APIRouter(tags=["Direct Vision OCR (Single Processing)"])
+
+PROMPT_PRESETS: Dict[OCRTaskType, Dict[str, str]] = {
+    OCRTaskType.GENERAL_OCR: {
+        "system": (
+            "You are a cutting-edge Vision-Language OCR model. "
+            "Your objective is to accurately transcribe all content from document pages into structured, high-fidelity Markdown."
+        ),
+        "user": (
+            "Transcribe all text from this document naturally in exact reading order preserving structural hierarchy.\n"
+            "Formatting Rules:\n"
+            "- Represent tables using clean HTML (<table>...</table>) or Markdown tables.\n"
+            "- Format mathematical expressions and chemical formulas in LaTeX ($...$ or $$...$$).\n"
+            "- For charts or diagrams, provide descriptions inside <img>...</img> tags.\n"
+            "- Preserve checkboxes using ☐ (unchecked) and ☑ (checked).\n"
+            "- Wrap watermarks in <watermark>...</watermark> and page numbers in <page_number>...</page_number>.\n"
+            "- Maintain original headings, bullet lists, and paragraphs faithfully without summarizing."
+        )
+    },
+    OCRTaskType.MEDICAL_EXTRACTION: {
+        "system": (
+            "You are an expert Clinical Laboratory Report Vision OCR AI. "
+            "Your objective is to accurately transcribe patient demographics and lab test observations from any laboratory layout into strict, structured JSON."
+        ),
+        "user": (
+            "Analyze this laboratory diagnostic report and extract all patient demographics and test observations into a JSON object matching this exact structure:\n"
+            "{\n"
+            '  "report_title": "Full Blood Count / Urine UPCR / Biochemistry",\n'
+            '  "patient_info": {\n'
+            '    "patient_name": "...",\n'
+            '    "pid_no": "...",\n'
+            '    "age": "...",\n'
+            '    "sex": "...",\n'
+            '    "tel_no": "",\n'
+            '    "reference_dr": "",\n'
+            '    "registered_on": "",\n'
+            '    "collected_on": "",\n'
+            '    "reported_on": ""\n'
+            "  },\n"
+            '  "results": [\n'
+            "    {\n"
+            '      "type": "fasting_blood_sugar",\n'
+            '      "name": "Fasting Blood Sugar",\n'
+            '      "value": "104",\n'
+            '      "unit": "mg/dl"\n'
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "CRITICAL RULES:\n"
+            "1. In the 'results' array, include ONLY actual patient test observations. Do NOT extract reference range tables, interpretation remark grids (e.g. '< 0.2 Normal'), or age guideline charts as results.\n"
+            "2. If the value and unit are in the same column (e.g. '104 mg/dl'), separate them cleanly into value ('104') and unit ('mg/dl').\n"
+            "3. Set 'type' as a lowercase snake_case identifier (e.g. 'fasting_blood_sugar', 'total_cholesterol', 'protein_total', 'creatinine', 'protein_creatinine_ratio').\n"
+            "4. Return strictly valid JSON."
+        )
+    },
+    OCRTaskType.TABLE_EXTRACTION: {
+        "system": "You are a specialized Document Table & Grid Extraction AI.",
+        "user": "Extract all data tables and structured grids from this document into clean HTML <table> structures with exact column headers and row alignment."
+    },
+    OCRTaskType.DOCUMENT_RECONSTRUCTION: {
+        "system": "You are an expert Document Layout and Semantic Reconstruction AI.",
+        "user": "Faithfully reconstruct the full document layout, headings, text sections, tables, and figures into semantic, publication-grade Markdown."
+    },
+    OCRTaskType.CUSTOM: {
+        "system": "You are an expert Vision-Language Document AI.",
+        "user": "Extract and transcribe all content from this document accurately."
+    }
+}
+
+def resolve_prompts(request: OCRRequest) -> tuple[str, str]:
+    task = request.task_type or (OCRTaskType.MEDICAL_EXTRACTION if request.format == OCRFormat.JSON else OCRTaskType.GENERAL_OCR)
+    preset = PROMPT_PRESETS.get(task, PROMPT_PRESETS[OCRTaskType.GENERAL_OCR])
+
+    system_prompt = request.system_prompt or preset["system"]
+    user_prompt = request.prompt or preset["user"]
+    return system_prompt, user_prompt
+
 
 @router.post(
     "",
@@ -41,19 +117,21 @@ async def process_ocr_sync(request: OCRRequest):
     target_model = request.model or settings.default_model
 
     try:
-        # 1. Normalize Document
-        doc_uri = await ImageProcessor.process_image_input(request.document)
+        # 1. Process Document with Multi-Page extraction (no squashing)
+        doc_res = await ImageProcessor.process_document_input(request.document)
+        page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
+        page_count = len(page_uris)
 
-        # 2. Build Multi-modal Prompt
+        system_prompt, user_prompt = resolve_prompts(request)
+
+        # 2. Build Multi-modal User Turn containing all pages
+        user_content: List[Dict[str, Any]] = [{"type": "text", "text": user_prompt}]
+        for uri in page_uris:
+            user_content.append({"type": "image_url", "image_url": {"url": uri}})
+
         messages = [
-            {"role": "system", "content": request.system_prompt},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": request.prompt},
-                    {"type": "image_url", "image_url": {"url": doc_uri}}
-                ]
-            }
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
         ]
 
         # 3. Call LLM
@@ -69,31 +147,37 @@ async def process_ocr_sync(request: OCRRequest):
 
         choices = raw_res.get("choices", [])
         raw_output = choices[0].get("message", {}).get("content", "") if choices else ""
+        used_model = raw_res.get("model", target_model)
         duration = round(time.monotonic() - start_time, 2)
         now_iso = datetime.now(timezone.utc).isoformat()
 
         # 4. Format Output
         if request.format == OCRFormat.JSON:
-            parsed_data, err = SchemaValidator.parse_and_validate(raw_output, MedicalReportExtraction if request.strict_schema else None)
+            target_schema = MedicalReportExtraction if (request.task_type == OCRTaskType.MEDICAL_EXTRACTION and request.strict_schema) else None
+            parsed_data, err = SchemaValidator.parse_and_validate(raw_output, target_schema)
             return OCRResponse(
                 status="success",
                 format=request.format,
+                task_type=request.task_type,
                 backend=target_backend,
-                model=target_model,
+                model=used_model,
                 data=parsed_data if parsed_data else {"raw": raw_output},
                 raw_text=raw_output,
                 duration_seconds=duration,
+                page_count=page_count,
                 created_at=now_iso
             )
         else:
             return OCRResponse(
                 status="success",
                 format=request.format,
+                task_type=request.task_type,
                 backend=target_backend,
-                model=target_model,
+                model=used_model,
                 data=raw_output,
                 raw_text=raw_output,
                 duration_seconds=duration,
+                page_count=page_count,
                 created_at=now_iso
             )
 
@@ -114,16 +198,17 @@ async def process_ocr_stream(request: OCRRequest):
     target_model = request.model or settings.default_model
 
     try:
-        doc_uri = await ImageProcessor.process_image_input(request.document)
+        doc_res = await ImageProcessor.process_document_input(request.document)
+        page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
+        system_prompt, user_prompt = resolve_prompts(request)
+
+        user_content: List[Dict[str, Any]] = [{"type": "text", "text": user_prompt}]
+        for uri in page_uris:
+            user_content.append({"type": "image_url", "image_url": {"url": uri}})
+
         messages = [
-            {"role": "system", "content": request.system_prompt},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": request.prompt},
-                    {"type": "image_url", "image_url": {"url": doc_uri}}
-                ]
-            }
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
         ]
     except ImageProcessingError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -148,41 +233,6 @@ async def process_ocr_stream(request: OCRRequest):
 
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
-DEFAULT_SYSTEM_PROMPT = (
-    "You are an expert Clinical Laboratory Report Vision OCR AI. "
-    "Your objective is to accurately transcribe patient demographics and lab test observations from any laboratory layout into strict, structured JSON."
-)
-DEFAULT_USER_PROMPT = (
-    "Analyze this laboratory diagnostic report and extract all patient demographics and test observations into a JSON object matching this exact structure:\n"
-    "{\n"
-    '  "report_title": "Full Blood Count / Urine UPCR / Biochemistry",\n'
-    '  "patient_info": {\n'
-    '    "patient_name": "...",\n'
-    '    "pid_no": "...",\n'
-    '    "age": "...",\n'
-    '    "sex": "...",\n'
-    '    "tel_no": "",\n'
-    '    "reference_dr": "",\n'
-    '    "registered_on": "",\n'
-    '    "collected_on": "",\n'
-    '    "reported_on": ""\n'
-    "  },\n"
-    '  "results": [\n'
-    "    {\n"
-    '      "type": "fasting_blood_sugar",\n'
-    '      "name": "Fasting Blood Sugar",\n'
-    '      "value": "104",\n'
-    '      "unit": "mg/dl"\n'
-    "    }\n"
-    "  ]\n"
-    "}\n"
-    "CRITICAL RULES:\n"
-    "1. In the 'results' array, include ONLY actual patient test observations. Do NOT extract reference range tables, interpretation remark grids (e.g. '< 0.2 Normal'), or age guideline charts as results.\n"
-    "2. If the value and unit are in the same column (e.g. '104 mg/dl'), separate them cleanly into value ('104') and unit ('mg/dl').\n"
-    "3. Set 'type' as a lowercase snake_case identifier (e.g. 'fasting_blood_sugar', 'total_cholesterol', 'protein_total', 'creatinine', 'protein_creatinine_ratio').\n"
-    "4. Return strictly valid JSON."
-)
-
 @router.post(
     "/upload",
     response_model=OCRResponse,
@@ -192,19 +242,21 @@ DEFAULT_USER_PROMPT = (
 async def process_ocr_upload(
     file: UploadFile = File(..., description="PDF document or Image file to extract"),
     format: OCRFormat = Form(OCRFormat.JSON),
-    prompt: Optional[str] = Form(DEFAULT_USER_PROMPT),
-    system_prompt: Optional[str] = Form(DEFAULT_SYSTEM_PROMPT),
+    task_type: Optional[OCRTaskType] = Form(OCRTaskType.MEDICAL_EXTRACTION),
+    prompt: Optional[str] = Form(None),
+    system_prompt: Optional[str] = Form(None),
     backend: Optional[str] = Form(None),
     model: Optional[str] = Form(None),
     temperature: float = Form(0.0),
-    max_tokens: int = Form(1536)
+    max_tokens: int = Form(8192)
 ):
     try:
         file_bytes = await file.read()
-        doc_uri = ImageProcessor.process_image_bytes(file_bytes)
+        doc_res = ImageProcessor.process_document(file_bytes)
         req = OCRRequest(
-            document=doc_uri,
+            document=doc_res["primary_data_uri"],
             format=format,
+            task_type=task_type or OCRTaskType.MEDICAL_EXTRACTION,
             prompt=prompt,
             system_prompt=system_prompt,
             backend=backend,
@@ -217,3 +269,4 @@ async def process_ocr_upload(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"File OCR failed: {str(e)}")
+

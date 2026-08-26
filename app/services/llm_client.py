@@ -53,18 +53,18 @@ class LLMClient:
             await self._client.aclose()
 
     def get_backend_url(self, backend: Optional[str] = None) -> str:
-        target = backend or self.default_backend
+        target = (backend or self.default_backend).lower()
         if target in ("llama-cpp", "llama_cpp", "llama.cpp", "llamacpp"):
             return settings.llama_cpp_url.rstrip("/")
         elif target in ("llm-server", "llm_server", "llmserver", "gateway", "8100"):
             return settings.llm_server_url.rstrip("/")
         elif target == "ollama":
             return settings.ollama_url.rstrip("/")
-        return settings.llm_server_url.rstrip("/")
+        return settings.ollama_url.rstrip("/") if self.default_backend == "ollama" else settings.llm_server_url.rstrip("/")
 
     async def get_available_models(self, backend: Optional[str] = None) -> List[Dict[str, Any]]:
         """Queries the direct LLM backend for available/loaded models."""
-        target_backend = backend or self.default_backend
+        target_backend = (backend or self.default_backend).lower()
         backend_url = self.get_backend_url(target_backend)
         client = await self.get_client()
 
@@ -76,16 +76,16 @@ class LLMClient:
 
         try:
             if target_backend in ("llama-cpp", "llama_cpp", "llama.cpp", "llamacpp"):
-                # Query llama-server /v1/models
+                # Query /v1/models (OpenAI standard)
                 resp = await client.get(f"{backend_url}/v1/models", headers=headers, timeout=5.0)
                 if resp.status_code == 200:
                     data = resp.json().get("data", [])
                     for item in data:
                         models_list.append({
                             "id": item.get("id"),
-                            "aliases": item.get("aliases", []),
-                            "status": item.get("status", {}).get("value", "unknown"),
-                            "input_modalities": item.get("architecture", {}).get("input_modalities", ["text"]),
+                            "aliases": item.get("aliases", [item.get("id")]),
+                            "status": item.get("status", {}).get("value", "loaded") if isinstance(item.get("status"), dict) else "loaded",
+                            "input_modalities": item.get("architecture", {}).get("input_modalities", ["text", "image"]) if isinstance(item.get("architecture"), dict) else ["text", "image"],
                             "backend": "llama-cpp"
                         })
             elif target_backend in ("llm-server", "llm_server", "llmserver", "gateway", "8100"):
@@ -148,11 +148,15 @@ class LLMClient:
             logger.info(f"No models returned by [{target_backend}], using fallback model: '{fallback}'")
             return fallback
 
-        vision_keywords = ["ministral-3", "ministral", "pixtral", "qwen2.5vl", "qwen2.5-vl", "qwen3-vl", "qwen3vl", "vl", "vision", "llava", "moondream", "gemma4", "minicpm-v", "llama3.2-vision", "bakllava"]
+        # Prioritized vision model search terms
+        vision_keywords = [
+            "qwen3-vl", "qwen3vl", "qwen2.5vl", "qwen2.5-vl", "qwen-vl", "nanonets", 
+            "olmocr", "deepseek-ocr", "chandra", "paddleocr", "docling", 
+            "ministral-3", "ministral", "pixtral", "vl", "vision", "llava", "moondream", "gemma4"
+        ]
 
         # 1. If has_images=True, verify requested model supports vision or select a vision-capable model
         if has_images:
-            # Check if requested model itself is a vision model
             if requested_model:
                 req_lower = requested_model.lower()
                 is_req_vision = any(vk in req_lower for vk in vision_keywords)
@@ -164,12 +168,20 @@ class LLMClient:
                             logger.info(f"Using requested vision model '{m_id}' on [{target_backend}]")
                             return m_id
 
-            # Select first available vision-capable model
+            # Priority 1: Check for qwen3-vl or qwen2.5vl in available models
+            for preferred in ["qwen3-vl", "qwen2.5vl", "qwen2.5-vl", "nanonets", "olmocr"]:
+                for m in available_models:
+                    m_id = m.get("id", "").lower()
+                    if preferred in m_id:
+                        logger.info(f"Auto-selected top SOTA vision model '{m['id']}' on [{target_backend}]")
+                        return m["id"]
+
+            # Priority 2: Select first available vision-capable model
             for m in available_models:
                 m_id = m.get("id", "").lower()
                 modalities = m.get("input_modalities", [])
                 if "image" in modalities or any(vk in m_id for vk in vision_keywords):
-                    logger.info(f"Auto-selected vision-capable model '{m['id']}' on [{target_backend}] (requested model '{requested_model}' is text-only)")
+                    logger.info(f"Auto-selected vision-capable model '{m['id']}' on [{target_backend}]")
                     return m["id"]
 
             logger.warning(f"An image was provided but no known vision models found on [{target_backend}].")
@@ -184,11 +196,13 @@ class LLMClient:
                     logger.info(f"Using requested model '{m_id}' on [{target_backend}]")
                     return m_id
 
-        # 3. Prioritize 'loaded' model
-        for m in available_models:
-            if m.get("status") == "loaded":
-                logger.info(f"Picked active loaded model '{m['id']}' on [{target_backend}]")
-                return m["id"]
+        # 3. Prioritize 'qwen3-vl' or 'qwen2.5vl' as default if available
+        for preferred in ["qwen3-vl", "qwen2.5vl", "qwen2.5-vl"]:
+            for m in available_models:
+                m_id = m.get("id", "").lower()
+                if preferred in m_id:
+                    logger.info(f"Selected default preferred model '{m['id']}' on [{target_backend}]")
+                    return m["id"]
 
         # 4. Fallback to first model in list
         if available_models:
@@ -206,7 +220,7 @@ class LLMClient:
         stream: bool = False,
         json_mode: bool = False
     ) -> Dict[str, Any]:
-        """Converts OpenAI format messages to native Ollama format for /api/chat fallback."""
+        """Converts OpenAI format messages to native Ollama format for /api/chat fallback with multi-image support."""
         ollama_msgs = []
         for msg in messages:
             role = msg.get("role", "user")
@@ -238,8 +252,8 @@ class LLMClient:
             "stream": stream,
             "keep_alive": settings.ollama_keep_alive,
             "options": {
-                "temperature": max(temperature, 0.1) if temperature == 0.0 else temperature,
-                "repeat_penalty": 1.1,
+                "temperature": max(temperature, 0.0) if temperature == 0.0 else temperature,
+                "repeat_penalty": 1.05,
                 "num_gpu": 99,
                 "num_thread": 8,
                 "num_ctx": settings.ollama_num_ctx,

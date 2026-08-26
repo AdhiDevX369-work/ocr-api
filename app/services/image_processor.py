@@ -60,9 +60,9 @@ class ImageProcessor:
         return None
 
     @staticmethod
-    def render_pdf_to_pil_images(pdf_bytes: bytes, dpi: int = 110) -> list[Image.Image]:
+    def render_pdf_to_pil_images(pdf_bytes: bytes, dpi: int = settings.pdf_render_dpi) -> list[Image.Image]:
         """
-        Renders PDF pages into individual PIL images at optimal clarity (100-120 DPI).
+        Renders PDF pages into individual PIL images at optimal clarity (150 DPI).
         Tries pypdfium2 first, then PyMuPDF (fitz), then pdf2image.
         """
         images = []
@@ -71,13 +71,13 @@ class ImageProcessor:
         try:
             import pypdfium2 as pdfium
             pdf = pdfium.PdfDocument(pdf_bytes)
-            # scale=1.5 gives ~108-110 dpi (optimal vision patch token ratio)
-            scale = max(1.2, dpi / 72.0)
+            # scale based on DPI (72 DPI is scale 1.0; 150 DPI is scale ~2.08)
+            scale = max(1.5, dpi / 72.0)
             for page in pdf:
                 image = page.render(scale=scale).to_pil()
                 images.append(image)
             if images:
-                logger.info(f"Rendered {len(images)} PDF page(s) using pypdfium2 (scale={scale:.1f})")
+                logger.info(f"Rendered {len(images)} PDF page(s) using pypdfium2 (scale={scale:.2f}, dpi={dpi})")
                 return images
         except Exception as e:
             logger.debug(f"pypdfium2 rendering failed/unavailable: {e}")
@@ -91,7 +91,7 @@ class ImageProcessor:
                 image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
                 images.append(image)
             if images:
-                logger.info(f"Rendered {len(images)} PDF page(s) using PyMuPDF (fitz)")
+                logger.info(f"Rendered {len(images)} PDF page(s) using PyMuPDF (fitz, dpi={dpi})")
                 return images
         except Exception as e:
             logger.debug(f"PyMuPDF rendering failed/unavailable: {e}")
@@ -101,7 +101,7 @@ class ImageProcessor:
             from pdf2image import convert_from_bytes
             images = convert_from_bytes(pdf_bytes, dpi=dpi)
             if images:
-                logger.info(f"Rendered {len(images)} PDF page(s) using pdf2image")
+                logger.info(f"Rendered {len(images)} PDF page(s) using pdf2image (dpi={dpi})")
                 return images
         except Exception as e:
             logger.debug(f"pdf2image rendering failed/unavailable: {e}")
@@ -117,7 +117,7 @@ class ImageProcessor:
         max_dim: int = settings.max_image_size_px,
         quality: int = settings.image_jpeg_quality
     ) -> str:
-        """Converts PIL Image to optimized base64 JPEG data URI."""
+        """Converts PIL Image to high-fidelity base64 JPEG data URI using Lanczos filter."""
         # Convert modes
         if image.mode in ("RGBA", "P", "LA"):
             background = Image.new("RGB", image.size, (255, 255, 255))
@@ -129,7 +129,7 @@ class ImageProcessor:
         elif image.mode != "RGB":
             image = image.convert("RGB")
 
-        # Downscale proportionally if exceeding max_dim
+        # Downscale proportionally only if exceeding max_dim (preserving aspect ratio with Lanczos)
         w, h = image.size
         scale = 1.0
         if max(w, h) > max_dim:
@@ -138,10 +138,10 @@ class ImageProcessor:
         if scale < 1.0:
             new_w = max(1, int(w * scale))
             new_h = max(1, int(h * scale))
-            image = image.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=quality, optimize=False, subsampling=0)
+        image.save(buffer, format="JPEG", quality=quality, optimize=True, subsampling=0)
         b64_encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
         return f"data:image/jpeg;base64,{b64_encoded}"
 
@@ -173,14 +173,15 @@ class ImageProcessor:
         cls,
         data_bytes: bytes,
         max_dim: int = settings.max_image_size_px,
-        quality: int = settings.image_jpeg_quality
+        quality: int = settings.image_jpeg_quality,
+        dpi: int = settings.pdf_render_dpi
     ) -> Dict[str, Any]:
         """
         Comprehensive document processing engine:
         - Detects PDF vs Image
         - Extracts digital text if present (Hybrid OCR)
-        - Renders high-DPI page images
-        - Returns list of individual page Data URIs and primary stitched Data URI
+        - Renders high-DPI individual page images
+        - Returns list of individual page Data URIs and primary preview Data URI
         """
         is_pdf_doc = cls.is_pdf(data_bytes)
         digital_text = None
@@ -188,7 +189,7 @@ class ImageProcessor:
 
         if is_pdf_doc:
             digital_text = cls.extract_digital_text(data_bytes)
-            page_images = cls.render_pdf_to_pil_images(data_bytes)
+            page_images = cls.render_pdf_to_pil_images(data_bytes, dpi=dpi)
         else:
             try:
                 img = Image.open(io.BytesIO(data_bytes))
@@ -200,14 +201,10 @@ class ImageProcessor:
         if not page_images:
             raise ImageProcessingError("Document contained zero renderable pages.")
 
+        # Convert each page individually with high resolution
         page_data_uris = [cls.pil_to_base64_data_uri(p, max_dim=max_dim, quality=quality) for p in page_images]
 
-        # Stitched image for single-view
-        if len(page_images) == 1:
-            primary_uri = page_data_uris[0]
-        else:
-            stitched = cls.stitch_images_vertically(page_images)
-            primary_uri = cls.pil_to_base64_data_uri(stitched, max_dim=max_dim, quality=quality)
+        primary_uri = page_data_uris[0]
 
         return {
             "is_pdf": is_pdf_doc,
@@ -229,12 +226,17 @@ class ImageProcessor:
         return res["primary_data_uri"]
 
     @classmethod
-    async def process_image_input(
+    async def process_document_input(
         cls,
         image_input: str,
-        http_client: httpx.AsyncClient = None
-    ) -> str:
-        """Normalizes Base64 string, Data URI, or URL into a clean primary Data URI."""
+        http_client: Optional[httpx.AsyncClient] = None,
+        max_dim: int = settings.max_image_size_px,
+        quality: int = settings.image_jpeg_quality
+    ) -> Dict[str, Any]:
+        """
+        Processes Base64 string, Data URI, or URL into full document info
+        including all individual page data URIs.
+        """
         if not image_input or not image_input.strip():
             raise ImageProcessingError("Empty image or document input provided.")
 
@@ -252,7 +254,7 @@ class ImageProcessor:
                 finally:
                     if should_close:
                         await client.aclose()
-                return cls.process_image_bytes(data_bytes)
+                return cls.process_document(data_bytes, max_dim=max_dim, quality=quality)
             except ImageProcessingError:
                 raise
             except Exception as e:
@@ -266,8 +268,18 @@ class ImageProcessor:
 
         try:
             data_bytes = base64.b64decode(b64_str)
-            return cls.process_image_bytes(data_bytes)
+            return cls.process_document(data_bytes, max_dim=max_dim, quality=quality)
         except ImageProcessingError:
             raise
         except Exception as e:
             raise ImageProcessingError(f"Failed to decode base64 input data: {str(e)}")
+
+    @classmethod
+    async def process_image_input(
+        cls,
+        image_input: str,
+        http_client: httpx.AsyncClient = None
+    ) -> str:
+        """Normalizes Base64 string, Data URI, or URL into a clean primary Data URI (Backward compatible)."""
+        doc_res = await cls.process_document_input(image_input, http_client=http_client)
+        return doc_res["primary_data_uri"]

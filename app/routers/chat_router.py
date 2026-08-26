@@ -74,12 +74,17 @@ async def build_messages_payload(
             else:
                 messages.append({"role": role, "content": content})
 
-    # 3. Current User Turn with Image
-    processed_image_uri = None
+    # 3. Current User Turn with Multi-Page Image Support
     if image_input:
-        processed_image_uri = await ImageProcessor.process_image_input(image_input)
+        doc_res = await ImageProcessor.process_document_input(image_input)
+        page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
+        user_content = [{"type": "text", "text": prompt}]
+        for uri in page_uris:
+            user_content.append({"type": "image_url", "image_url": {"url": uri}})
+        messages.append({"role": "user", "content": user_content})
+    else:
+        messages.append({"role": "user", "content": prompt})
 
-    messages.append(format_openai_multimodal_message(prompt, processed_image_uri))
     return messages
 
 

@@ -116,7 +116,7 @@ with st.sidebar:
     backend = st.selectbox("LLM Backend", options=backend_options, index=default_backend_idx)
     
     env_model = settings.default_model
-    known_models = ["ministral-3:latest", "qwen3-vl:4b", "mistral:latest", "llama3.1:latest", "gemma4:latest", "qwen3.5:4b-ctx128k"]
+    known_models = ["qwen3-vl:4b", "qwen2.5vl:latest", "qwen2.5:7b", "nanonets/Nanonets-OCR2-3B", "allenai/olmOCR-2-7B-1025", "deepseek-ai/DeepSeek-OCR", "ministral-3:latest", "mistral:latest"]
     if env_model and env_model not in known_models:
         known_models.insert(0, env_model)
 

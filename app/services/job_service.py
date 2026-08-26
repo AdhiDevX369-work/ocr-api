@@ -147,19 +147,18 @@ class JobService:
                 batch_id = job.batch_id
 
             try:
-                # 2. Normalize and prepare document
-                doc_uri = await ImageProcessor.process_image_input(doc_input)
+                # 2. Normalize and prepare document (multi-page support)
+                doc_res = await ImageProcessor.process_document_input(doc_input)
+                page_uris = doc_res.get("page_data_uris", [doc_res["primary_data_uri"]])
 
-                # 3. Prepare Multi-modal Prompt
+                # 3. Prepare Multi-modal Prompt with all document pages
+                user_content: List[Dict[str, Any]] = [{"type": "text", "text": prompt}]
+                for uri in page_uris:
+                    user_content.append({"type": "image_url", "image_url": {"url": uri}})
+
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {"url": doc_uri}}
-                        ]
-                    }
+                    {"role": "user", "content": user_content}
                 ]
 
                 # 4. Stream LLM Vision completion
