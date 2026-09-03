@@ -1,0 +1,30 @@
+{
+  "report_title": "Estimated Glomerular Filtration Rate (eGFR)",
+  "patient_info": {
+    "patient_name": "MR LAB PATIENT 2026 06 24",
+    "pid_no": "18350",
+    "tel_no": "0789954622",
+    "age": "22 Years",
+    "sex": "Male",
+    "reference_dr": "",
+    "sample_collected_at": "Main Lab",
+    "collecting_center": "Collecting Center",
+    "registered_on": "2026-07-02 5.36 PM",
+    "collected_on": "2026-07-02 5.41 PM",
+    "reported_on": "2026-07-02 5.47 PM"
+  },
+  "results": [
+    {
+      "type": "serum_creatinine",
+      "name": "Serum Creatinine",
+      "value": "0.6",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "egfr",
+      "name": "eGFR",
+      "value": "116",
+      "unit": "mL/min/1.73m²"
+    }
+  ]
+}

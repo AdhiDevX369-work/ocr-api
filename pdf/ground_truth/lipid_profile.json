@@ -1,0 +1,54 @@
+{
+  "report_title": "Lipid Profile",
+  "patient_info": {
+    "patient_name": "MR LAB PATIENT 2026 06 24",
+    "pid_no": "18350",
+    "tel_no": "0789954622",
+    "age": "22 Years",
+    "sex": "Male",
+    "reference_dr": "",
+    "sample_collected_at": "Main Lab",
+    "collecting_center": "Collecting Center",
+    "registered_on": "2026-07-02 5.37 PM",
+    "collected_on": "2026-07-02 5.41 PM",
+    "reported_on": "2026-07-02 5.47 PM"
+  },
+  "results": [
+    {
+      "type": "total_cholesterol",
+      "name": "Total Cholesterol",
+      "value": "230",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "triglycerides",
+      "name": "Triglycerides",
+      "value": "150",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "hdl_cholesterol",
+      "name": "HDL Cholesterol",
+      "value": "40",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "ldl_cholesterol",
+      "name": "LDL Cholesterol",
+      "value": "100",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "vldl_cholesterol",
+      "name": "VLDL Cholesterol",
+      "value": "38",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "chol_hdl_ratio",
+      "name": "CHOL/HDL Ratio",
+      "value": "3.5",
+      "unit": ""
+    }
+  ]
+}

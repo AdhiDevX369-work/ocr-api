@@ -54,24 +54,17 @@ class NativeOCRService:
         # Run inference
         results = reader.readtext(img_np)
 
-        # Sort extracted bounding boxes top-to-bottom, left-to-right
-        # bbox structure: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-        # sort by y1 first (with 10px bucket threshold), then x1
-        sorted_results = sorted(results, key=lambda item: (round(item[0][0][1] / 12) * 12, item[0][0][0]))
-
-        extracted_lines: List[str] = []
-        for bbox, text, prob in sorted_results:
-            clean_t = text.strip()
-            if clean_t and prob > 0.2:
-                extracted_lines.append(clean_t)
+        # Group extracted bounding boxes into aligned 2D horizontal rows
+        merged_rows = clinical_rule_parser.group_spatial_rows(results)
+        extracted_lines: List[str] = [" | ".join(r) for r in merged_rows]
 
         t1 = time.monotonic()
         duration = round(t1 - t0, 3)
         logger.info(f"⚡ [Native OCR] Line extraction finished in {duration}s. Extracted {len(extracted_lines)} lines.")
         logger.debug(f"📄 [Native OCR] Raw extracted lines:\n" + "\n".join(f"   [{i+1}] {l}" for i, l in enumerate(extracted_lines)))
 
-        # Parse with deterministic clinical rule parser
-        parsed_data = clinical_rule_parser.parse(extracted_lines)
+        # Parse with deterministic 2D spatial clinical rule parser
+        parsed_data = clinical_rule_parser.parse_from_spatial_boxes(results)
         logger.info(f"🧪 [Clinical Rule Parser] Parsed Title: '{parsed_data.get('report_title')}', Patient: {parsed_data.get('patient_info')}, Results count: {len(parsed_data.get('results', []))}")
 
         # Validate with strict schema

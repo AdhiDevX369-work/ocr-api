@@ -64,7 +64,11 @@ Thumbs.db
 logs/
 tmp/
 temp/
+storage/
+*.db
+*.sqlite
+*.sqlite3
 
-# PDF samples directory
-pdf/
+# PDF uploaded cache (keep canonical sample pdfs)
+storage/pdf_cache/
 

@@ -40,11 +40,13 @@ Convert the following raw OCR text lines from a medical laboratory report into a
 
 CRITICAL RULES:
 1. Output ONLY the JSON object. Do not wrap in markdown quotes if possible.
-2. Extract actual patient test observations ONLY.
-3. DO NOT include reference guideline charts, interpretation intervals (e.g. '< 0.2 Normal', '0.2 - 1.0 Low grade proteinuria'), or doctor signature labels inside 'results'.
-4. Separate combined values and units cleanly (e.g. '11.00 mg/dL' -> value: '11.00', unit: 'mg/dL').
+2. Extract actual patient test observations ONLY from the 'Result' or 'Observed Value' column.
+3. NEVER extract numbers from the 'Reference Value', 'Biological Reference Interval', or age normal charts as test values!
+4. DO NOT include reference guideline charts, interpretation intervals (e.g. '< 0.2 Normal', '0.2 - 1.0 Low grade proteinuria'), or doctor signature labels inside 'results'.
+5. Separate combined values and units cleanly (e.g. '11.00 mg/dL' -> value: '11.00', unit: 'mg/dL').
+6. For percentages and counts, preserve exact numbers (e.g. '80 %' -> value: '80', unit: '%').
 
-Raw OCR Text Lines:
+Raw OCR Text Rows:
 """
 
 class HybridPipelineService:

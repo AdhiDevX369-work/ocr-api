@@ -328,7 +328,7 @@ async def process_ocr_upload(
     file: UploadFile = File(..., description="PDF document or Image file to extract"),
     format: OCRFormat = Form(OCRFormat.JSON),
     task_type: Optional[OCRTaskType] = Form(OCRTaskType.MEDICAL_EXTRACTION),
-    engine: OCREngine = Form(OCREngine.VISION_LLM),
+    engine: OCREngine = Form(OCREngine.NATIVE),
     prompt: Optional[str] = Form(None),
     system_prompt: Optional[str] = Form(None),
     backend: Optional[str] = Form(None),

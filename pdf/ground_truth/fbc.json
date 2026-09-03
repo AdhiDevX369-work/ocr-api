@@ -1,0 +1,78 @@
+{
+  "report_title": "Full Blood Count",
+  "patient_info": {
+    "patient_name": "MISS TOPH",
+    "pid_no": "18353",
+    "tel_no": "0741781969",
+    "age": "20 Years",
+    "sex": "Female",
+    "reference_dr": "",
+    "sample_collected_at": "Main Lab",
+    "collecting_center": "Collecting Center",
+    "registered_on": "2026-07-02 5:52 PM",
+    "collected_on": "2026-07-02 5.53 PM",
+    "reported_on": "2026-07-02 5.55 PM"
+  },
+  "results": [
+    {
+      "type": "wbc_count",
+      "name": "WBC Count",
+      "value": "3000",
+      "unit": "cells/mm³"
+    },
+    {
+      "type": "neutrophils",
+      "name": "Neutrophils",
+      "value": "80",
+      "unit": "%"
+    },
+    {
+      "type": "lymphocytes",
+      "name": "Lymphocytes",
+      "value": "16",
+      "unit": "%"
+    },
+    {
+      "type": "rbc_count",
+      "name": "RBC Count",
+      "value": "4.6",
+      "unit": "million/mm³"
+    },
+    {
+      "type": "hb",
+      "name": "Hb",
+      "value": "12",
+      "unit": "g/dL"
+    },
+    {
+      "type": "pcv",
+      "name": "PCV",
+      "value": "30",
+      "unit": "%"
+    },
+    {
+      "type": "mcv",
+      "name": "MCV",
+      "value": "110",
+      "unit": "fL"
+    },
+    {
+      "type": "mch",
+      "name": "MCH",
+      "value": "28",
+      "unit": "pg"
+    },
+    {
+      "type": "mchc",
+      "name": "MCHC",
+      "value": "33",
+      "unit": "g/dL"
+    },
+    {
+      "type": "platelet_count",
+      "name": "Platelet count",
+      "value": "110000",
+      "unit": "/µL"
+    }
+  ]
+}

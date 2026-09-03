@@ -1,0 +1,30 @@
+{
+  "report_title": "Biochemistry",
+  "patient_info": {
+    "patient_name": "FAHIDHA",
+    "pid_no": "2489",
+    "tel_no": "+91 9745 760 302",
+    "age": "51 (Y)",
+    "sex": "Female",
+    "reference_dr": "",
+    "sample_collected_at": null,
+    "collecting_center": "Hana Diagnostic Laboratory ECG Center",
+    "registered_on": "12-09-2023 08.33 am",
+    "collected_on": "",
+    "reported_on": ""
+  },
+  "results": [
+    {
+      "type": "fasting_blood_sugar",
+      "name": "Fasting Blood Sugar",
+      "value": "104",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "total_cholesterol",
+      "name": "Total Cholesterol",
+      "value": "230",
+      "unit": "mg/dL"
+    }
+  ]
+}

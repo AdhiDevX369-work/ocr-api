@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     llm_server_url: str = "http://localhost:8100"
     default_backend: str = "ollama"
     default_model: str = "ministral-3:latest"
+    default_engine: str = "native"
     llm_api_key: str = "sk_oWt_VA4WcX84xa18rjt-RovbNH7dwhmZjlrLeDVMIZo"
     streamlit_port: int = 8600
     pdf_render_dpi: int = 150
@@ -19,7 +20,7 @@ class Settings(BaseSettings):
     ollama_num_ctx: int = 8192
     ollama_keep_alive: str = "24h"
     # Database & Storage
-    database_url: str = "sqlite+aiosqlite:///./ocr.db"  # Defaults to async SQLite, override with postgresql+asyncpg://user:pass@host:5432/db in .env
+    database_url: str = "sqlite+aiosqlite:///./storage/ocr.db"  # Defaults to async SQLite in storage/
     db_echo: bool = False
     db_pool_size: int = 20
     db_max_overflow: int = 10

@@ -1,0 +1,36 @@
+{
+  "report_title": "Urine Protein - Creatinine Ratio (UPCR)",
+  "patient_info": {
+    "patient_name": "Yash M. Patel",
+    "pid_no": "555",
+    "tel_no": "0123456789",
+    "age": "21 Years",
+    "sex": "Male",
+    "reference_dr": "Dr. Hiren Shah",
+    "sample_collected_at": "125, Shivam Bungalow, S G Road, Mumbai",
+    "collecting_center": "Drlogy Pathology Lab",
+    "registered_on": "02.31 PM 02 Dec, 2X",
+    "collected_on": "03.11 PM 02 Dec, 2X",
+    "reported_on": "04.35 PM 02 Dec, 2X"
+  },
+  "results": [
+    {
+      "type": "protein_total",
+      "name": "Protein Total",
+      "value": "11.00",
+      "unit": "mg/dL"
+    },
+    {
+      "type": "creatinin",
+      "name": "Creatinin",
+      "value": "11.00",
+      "unit": "mEq/L"
+    },
+    {
+      "type": "protein_creatinine_ratio",
+      "name": "Protein Creatinine Ratio",
+      "value": "1.00",
+      "unit": ""
+    }
+  ]
+}

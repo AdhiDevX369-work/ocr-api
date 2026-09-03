@@ -32,7 +32,7 @@ class OCRRequest(BaseModel):
     document: str = Field(..., description="Base64 Data URI or HTTP URL of PDF or Image scan")
     format: OCRFormat = Field(OCRFormat.JSON, description="Desired output format: 'json', 'markdown', 'html', 'latex', or 'text'")
     task_type: OCRTaskType = Field(OCRTaskType.MEDICAL_EXTRACTION, description="Task preset: 'general_ocr', 'medical_extraction', 'table_extraction', 'document_reconstruction', 'custom'")
-    engine: OCREngine = Field(OCREngine.VISION_LLM, description="OCR Engine: 'vocr' (Vision LLM) or 'paddle' (Native High-Speed OCR)")
+    engine: OCREngine = Field(OCREngine.NATIVE, description="OCR Engine: 'native' (Ultra-Fast Non-LLM OCR), 'hybrid' (Fast OCR + LLM Structurer), or 'vocr' (Vision LLM)")
     prompt: Optional[str] = Field(None, description="Custom prompt instructions. If omitted, task_type default is used.")
     system_prompt: Optional[str] = Field(None, description="System instruction. If omitted, task_type default is used.")
     backend: Optional[str] = Field(None, description="LLM backend ('ollama', 'vllm', 'llama-cpp', 'llm-server')")
